@@ -6,57 +6,56 @@ test.beforeEach(async ({ page }) => {
   await page.reload()
 })
 
-test('recovers a campaign board from the demo music folder', async ({ page }) => {
-  await expect(page.getByRole('heading', { name: 'Music Deadline Studio' })).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Start from a messy music folder, not a blank task board.' })).toBeVisible()
-
-  await page.getByRole('button', { name: 'Recover demo folder' }).click()
-
-  await expect(page.getByRole('heading', { name: /Demo folder:/ })).toBeVisible()
-  await expect(page.getByText('files analyzed locally by file trace')).toBeVisible()
-  await expect(page.getByLabel('Detected song groups').getByText('Night Bus')).toBeVisible()
-  await expect(page.getByLabel('Detected song groups').getByText('Guitar Motif')).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Recovered music workflow' })).toBeVisible()
-  await expect(page.getByLabel('Production kanban').getByText('Night Bus')).toBeVisible()
+test('日本語の音楽制作カンバンとして初回表示される', async ({ page }) => {
+  await expect(page.getByRole('heading', { name: '音楽制作カンバン' })).toBeVisible()
+  await expect(page.getByLabel('制作カンバン')).toBeVisible()
+  await expect(page.getByRole('heading', { name: '次に見るべきこと' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Readiness診断' })).toBeVisible()
+  await expect(page.getByText('曲、素材、告知、提出準備')).toBeVisible()
 })
 
-test('shows inferred risks and cause cards after recovery', async ({ page }) => {
-  await page.getByRole('button', { name: 'Recover demo folder' }).click()
+test('テンプレートを適用すると管理対象が切り替わる', async ({ page }) => {
+  await page.getByRole('tab', { name: 'ライブ / イベント' }).click()
+  await page.getByRole('button', { name: 'テンプレートを適用' }).click()
 
-  await expect(page.getByRole('heading', { name: 'Dormant idea was recovered from the folder' })).toBeVisible()
-  await expect(page.getByLabel('Risk diagnosis results').getByText('Cause card').first()).toBeVisible()
-  await expect(page.getByLabel('Next focus').getByText('Review Guitar Motif')).toBeVisible()
+  await expect(page.getByLabel('プロジェクト概要').getByLabel('プロジェクト名')).toHaveValue('ライブ / イベント')
+  await expect(page.getByRole('heading', { name: 'セットリスト' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '当日持ち物 / セット図' })).toBeVisible()
+  await expect(page.getByLabel('公開先 / 場所')).toHaveValue('ライブハウス / 配信')
 })
 
-test('updates diagnosis when recovered board cards are completed', async ({ page }) => {
-  await page.getByRole('button', { name: 'Recover demo folder' }).click()
+test('状態変更からリスク診断と次アクションが更新される', async ({ page }) => {
+  await expect(page.getByText('外部依存で止まっている項目があります')).toBeVisible()
 
-  await page.getByLabel('MV / video', { exact: true }).selectOption('ready')
-  await page.getByLabel('Artwork / thumbnail', { exact: true }).selectOption('ready')
-  await page.getByLabel('SNS assets', { exact: true }).selectOption('ready')
-  await page.getByLabel('Mix / master', { exact: true }).selectOption('done')
-  await page.getByLabel('Promotion path checked').check()
+  await page.getByLabel('動画 / サムネイルの状態').selectOption('ready')
 
-  await expect(page.getByText('No video asset was found')).toBeHidden()
-  await expect(page.getByText('Promotion path is not ready')).toBeHidden()
+  await expect(page.getByText('外部依存で止まっている項目があります')).toBeHidden()
+  await expect(page.getByRole('heading', { name: 'Readiness診断' })).toBeVisible()
 })
 
-test('persists recovered folder state after reload', async ({ page }) => {
-  await page.getByRole('button', { name: 'Recover demo folder' }).click()
-  await expect(page.getByRole('textbox', { name: 'Project' })).toHaveValue('Demo folder recovery')
+test('入力内容が保存される', async ({ page }) => {
+  await page.getByLabel('プロジェクト名').fill('秋の配信リリース')
+  await page.getByRole('button', { name: '行を追加' }).click()
+  await expect(page.getByLabel('新しい制作項目の項目名')).toHaveValue('新しい制作項目')
 
   await page.reload()
 
-  await expect(page.getByRole('textbox', { name: 'Project' })).toHaveValue('Demo folder recovery')
-  await expect(page.getByRole('heading', { name: /Demo folder:/ })).toBeVisible()
+  await expect(page.getByLabel('プロジェクト名')).toHaveValue('秋の配信リリース')
+  await expect(page.getByLabel('新しい制作項目の項目名')).toHaveValue('新しい制作項目')
 })
 
-test('supports mobile recovery view without horizontal overflow', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 900 })
-  await page.getByRole('button', { name: 'Recover demo folder' }).click()
+test('フォルダ復元実験は補助導線として候補行を追加できる', async ({ page }) => {
+  await page.getByRole('button', { name: 'デモ候補を追加' }).click()
 
-  await expect(page.getByRole('heading', { name: 'Music Deadline Studio' })).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Recovered music workflow' })).toBeVisible()
+  await expect(page.getByText('復元候補: Night Bus')).toBeVisible()
+  await expect(page.getByText('復元候補: Guitar Motif')).toBeVisible()
+})
+
+test('モバイル幅でも主要UIが横にはみ出さない', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 })
+
+  await expect(page.getByRole('heading', { name: '音楽制作カンバン' })).toBeVisible()
+  await expect(page.getByLabel('制作カンバン')).toBeVisible()
 
   const hasHorizontalOverflow = await page.evaluate(
     () => document.documentElement.scrollWidth > document.documentElement.clientWidth,

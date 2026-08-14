@@ -1,95 +1,75 @@
-# Music Deadline Studio
+# Music Campaign Board MVP
 
-Music Deadline Studio is a local-first validation MVP for independent music creators and small music teams. It explores a product direction where creators do not need to start from a blank task board: the app can recover project state from existing music folder traces and turn it into a lightweight campaign board.
+音楽制作者・小規模チーム向けの、制作/リリース/イベント準備カンバンです。
 
-The product is not a generic task manager and not a standalone release checklist. The core experience is: point the app at a music folder, recover song ideas/assets/progress, then see what looks dormant, missing, risky, or ready to move next.
+このMVPの狙いは、単なるチェックリストではなく、曲・素材・告知・提出準備・外部依存の進捗から、リリース前に危ない点と次にやるべきことが自然に見えるかを検証することです。
 
 ## Product Goal
 
-Help music creators turn messy creative folders into actionable production/campaign state with less manual setup than a generic task management tool.
+個人または小規模な音楽活動で、曲案、音源、動画、告知、配信登録、ライブ準備が散らばり、次に何を進めるべきか分からなくなる問題を軽減する。
 
 ## Core Hypothesis
 
-Music creators will value a workspace that starts from how they already work: DAW sessions, demos, bounces, lyrics, references, artwork, video files, and scattered assets. The app should infer enough structure to create a useful board and surface readiness risks.
+音楽制作者は、汎用タスク管理ツールの空白ボードよりも、音楽活動の文脈に合わせた項目・状態・依存関係を持つカンバンに価値を感じる。
 
-## Target User
-
-- Vocaloid and DTM creators with many sketches, bounces, and dormant ideas
-- Utaite or MV creators coordinating audio, lyrics, illustration, video, credits, and publish timing
-- Independent musicians preparing releases, contests, or posting events
-- Small bands or units with shared folders and multiple songs/workstreams
+さらに、Release readinessが手入力チェックリストではなく、日々の進捗更新から自然に診断されるなら、次回リリースやイベント準備でも使う可能性が高まる。
 
 ## MVP Scope
 
-- Mock folder recovery demo
-- Browser folder picker for local file trace analysis where supported
-- File type detection from names/extensions: DAW/session, demo, bounce, mix, master, lyrics, artwork, video, stems, references
-- Detected song/workstream groups
-- Estimated progress stage
-- Dormant idea signal from last-modified dates
-- Generated campaign board from recovered file traces
-- Music-specific cards for ideas, production lanes, assets, dependencies, and rules
-- Risk diagnosis with cause cards and next actions
-- `Next Focus` list with 1-3 prioritized actions
-- Browser-only persistence through `localStorage`
+- 日本語UI
+- 音楽制作向けカンバン
+- テンプレート切り替え
+  - 投稿祭 / ボカコレ
+  - DTMコンペ / 案件
+  - 歌ってみた / MV
+  - 配信リリース
+  - ライブ / イベント
+- 曲、音源、映像/画像、告知、提出/配信、ライブ、権利/表記の管理
+- 状態変更
+  - アイデア
+  - 次にやる
+  - 作業中
+  - 待ち
+  - 確認中
+  - 完了
+- 進捗、期限、外部依存、素材状態からのReadiness診断
+- 次に見るべきことの提示
+- ブラウザ内保存
+- 中長期仮説としてのフォルダ復元デモ導線
 
 ## Out of Scope
 
-- Reading audio contents
-- Uploading files to a backend
-- Cloud Drive integration
-- DAW-specific parsing
-- AI audio analysis
-- Full background monitoring
-- Full Jira/Linear/Asana feature parity
-- Multi-user collaboration accounts
-- Billing, marketplace, or creator matching
+- ユーザー認証
+- チーム招待
+- 実ファイル解析
+- DAW連携
+- ディストリビューター連携
+- SNS投稿連携
+- 決済
+- 本番データベース
 
-## Run Locally
+## 起動方法
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open the local URL printed by Vite.
+ブラウザで `http://127.0.0.1:5173/` を開きます。
 
-## Build
-
-```bash
-npm run build
-```
-
-## Test
+## 確認方法
 
 ```bash
 npm run lint
+npm run build
 npm run test:e2e
 ```
 
-## QA Checklist
+## Validationで確認したいこと
 
-- [ ] App opens without runtime errors
-- [ ] Demo folder recovery creates detected song/workstream groups
-- [ ] Recovery insights show file count, active work, dormant ideas, and missing package signals
-- [ ] Recovered board is generated without manually creating cards
-- [ ] Event type, deadline, platform, and project name can be edited
-- [ ] Cards can be updated and diagnosis changes
-- [ ] Risk findings include cause cards where relevant
-- [ ] State persists after reload
-- [ ] Mobile width has no horizontal scrolling
-- [ ] `npm run lint` succeeds
-- [ ] `npm run build` succeeds
-- [ ] `npm run test:e2e` succeeds
-
-## Known Limitations
-
-- File recovery uses transparent local heuristics based on file names, extensions, and timestamps.
-- The app does not read audio contents.
-- Browser folder selection support varies by browser.
-- Rule profiles are simplified and should not be treated as official event guidance.
-- The diagnosis is a validation aid, not legal, platform, or marketing advice.
-
-## Storage and Privacy
-
-The app has no backend. Project state and recovered file traces are stored only in the current browser through `localStorage`.
+- 週次または日々の制作確認で開く場面があるか
+- 曲以外に、投稿祭、コンペ、ライブ、配信リリースなどの切り口でも自然に使えるか
+- 汎用タスク管理より、音楽活動向けテンプレートと状態がある方が始めやすいか
+- ステータス更新から出るReadiness診断に納得感があるか
+- 入力負荷が日常利用に耐えられるか
+- フォルダ復元の中長期仮説に期待があるか

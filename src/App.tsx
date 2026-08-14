@@ -1,75 +1,29 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { ChangeEvent } from 'react'
 import './App.css'
 
-type EventType = 'festival' | 'contest' | 'cover-mv' | 'release' | 'live'
-type IdeaState = 'keep' | 'maybe' | 'parked' | 'rejected'
-type WorkStatus = 'not-started' | 'in-progress' | 'blocked' | 'done'
-type AssetStatus = 'missing' | 'draft' | 'ready'
-type DependencyStatus = 'none' | 'planned' | 'waiting' | 'received'
+type TemplateKey = 'festival' | 'contest' | 'coverMv' | 'release' | 'live'
+type Status = 'idea' | 'next' | 'doing' | 'waiting' | 'review' | 'ready'
 type Severity = 'critical' | 'warning' | 'ready'
-type Priority = 'Today' | 'This week' | 'Before deadline' | 'Monitor'
-type BoardColumnId = 'decide' | 'next' | 'doing' | 'waiting' | 'ready'
-type AssetKind = 'session' | 'demo' | 'bounce' | 'mix' | 'master' | 'lyrics' | 'artwork' | 'video' | 'stems' | 'reference'
+type WorkKind = 'song' | 'audio' | 'visual' | 'promo' | 'release' | 'live' | 'rights'
 
-type Idea = {
+type WorkItem = {
   id: string
   title: string
-  state: IdeaState
-  note: string
+  kind: WorkKind
+  status: Status
+  owner: string
+  due: string
+  dependency: string
+  asset: string
+  nextAction: string
 }
 
-type WorkLane = {
-  id: string
-  label: string
-  status: WorkStatus
-}
-
-type Asset = {
-  id: string
-  label: string
-  status: AssetStatus
-}
-
-type ProjectState = {
-  projectName: string
-  eventType: EventType
+type Project = {
+  title: string
+  template: TemplateKey
   deadline: string
   platform: string
-  goal: string
-  activeIdeaId: string
-  ideas: Idea[]
-  lanes: WorkLane[]
-  assets: Asset[]
-  illustrator: DependencyStatus
-  videoEditor: DependencyStatus
-  mixMaster: DependencyStatus
-  eventRulesChecked: boolean
-  postingWindowChecked: boolean
-  creditsChecked: boolean
-  promoPlanReady: boolean
-}
-
-type FileTrace = {
-  path: string
-  name: string
-  modifiedDaysAgo: number
-}
-
-type SongGroup = {
-  id: string
-  title: string
-  files: FileTrace[]
-  kinds: Set<AssetKind>
-  lastTouchedDaysAgo: number
-  stage: string
-}
-
-type ScanReport = {
-  source: string
-  groups: SongGroup[]
-  insights: string[]
-  filesAnalyzed: number
+  items: WorkItem[]
 }
 
 type Finding = {
@@ -77,527 +31,401 @@ type Finding = {
   severity: Severity
   title: string
   why: string
-  signal: string
   action: string
-  priority: Priority
-  sourceCard?: string
+  source: string
 }
 
-type BoardCard =
-  | { id: string; column: BoardColumnId; kind: 'idea'; title: string; meta: string; note: string; ideaId: string; state: IdeaState; active: boolean }
-  | { id: string; column: BoardColumnId; kind: 'lane'; title: string; meta: string; note: string; laneId: string; status: WorkStatus }
-  | { id: string; column: BoardColumnId; kind: 'asset'; title: string; meta: string; note: string; assetId: string; status: AssetStatus }
-  | { id: string; column: BoardColumnId; kind: 'dependency'; title: string; meta: string; note: string; dependencyId: 'illustrator' | 'videoEditor' | 'mixMaster'; status: DependencyStatus }
-  | { id: string; column: BoardColumnId; kind: 'rule'; title: string; meta: string; note: string; ruleId: 'eventRulesChecked' | 'postingWindowChecked' | 'creditsChecked' | 'promoPlanReady'; checked: boolean }
+const STORAGE_KEY = 'music-campaign-board-mvp-v1'
+const today = dateOffset(0)
 
-const STORAGE_KEY = 'deadline-music-os-v3'
-const REPORT_STORAGE_KEY = 'deadline-music-os-scan-report-v1'
-const todayISO = toDateInputValue(new Date())
-
-const columns: { id: BoardColumnId; title: string; subtitle: string }[] = [
-  { id: 'decide', title: 'Ideas', subtitle: 'choose or park' },
-  { id: 'next', title: 'Next', subtitle: 'not started' },
-  { id: 'doing', title: 'Working', subtitle: 'in progress' },
-  { id: 'waiting', title: 'Waiting', subtitle: 'blocked or external' },
-  { id: 'ready', title: 'Ready', subtitle: 'done or checked' },
-]
-
-const baseLanes: WorkLane[] = [
-  { id: 'composition', label: 'Composition / topline', status: 'not-started' },
-  { id: 'arrangement', label: 'Arrangement', status: 'not-started' },
-  { id: 'vocal', label: 'Vocal / recording', status: 'not-started' },
-  { id: 'mix', label: 'Mix / master', status: 'not-started' },
-  { id: 'artwork', label: 'Artwork / MV', status: 'not-started' },
-  { id: 'upload', label: 'Upload / submission', status: 'not-started' },
-  { id: 'promotion', label: 'Promotion', status: 'not-started' },
-]
-
-const baseAssets: Asset[] = [
-  { id: 'audio', label: 'Final audio', status: 'missing' },
-  { id: 'lyrics', label: 'Lyrics', status: 'missing' },
-  { id: 'artwork', label: 'Artwork / thumbnail', status: 'missing' },
-  { id: 'video', label: 'MV / video', status: 'missing' },
-  { id: 'description', label: 'Description / tags', status: 'missing' },
-  { id: 'credits', label: 'Credits', status: 'missing' },
-  { id: 'sns', label: 'SNS assets', status: 'missing' },
-]
-
-const sampleProject: ProjectState = {
-  projectName: 'Bokacolle summer campaign',
-  eventType: 'festival',
-  deadline: offsetDate(18),
-  platform: 'NicoNico / YouTube',
-  goal: 'Finish one strong song and prepare the public posting package without last-minute asset gaps.',
-  activeIdeaId: 'idea-1',
-  ideas: [
-    { id: 'idea-1', title: 'Night Bus Synth Rock', state: 'keep', note: 'Main candidate. Strong chorus, likely MV-friendly.' },
-    { id: 'idea-2', title: 'Transparent Piano DnB', state: 'maybe', note: 'Nice texture, but the structure still feels weak.' },
-    { id: 'idea-3', title: '8-bar Guitar Motif', state: 'parked', note: 'Probably better for another project.' },
-    { id: 'idea-4', title: 'Japanese EDM Fragment', state: 'rejected', note: 'Too large for this deadline.' },
-  ],
-  lanes: [
-    { id: 'composition', label: 'Composition / topline', status: 'done' },
-    { id: 'arrangement', label: 'Arrangement', status: 'in-progress' },
-    { id: 'vocal', label: 'Vocal / recording', status: 'in-progress' },
-    { id: 'mix', label: 'Mix / master', status: 'not-started' },
-    { id: 'artwork', label: 'Artwork / MV', status: 'blocked' },
-    { id: 'upload', label: 'Upload / submission', status: 'not-started' },
-    { id: 'promotion', label: 'Promotion', status: 'not-started' },
-  ],
-  assets: [
-    { id: 'audio', label: 'Final audio', status: 'draft' },
-    { id: 'lyrics', label: 'Lyrics', status: 'ready' },
-    { id: 'artwork', label: 'Artwork / thumbnail', status: 'missing' },
-    { id: 'video', label: 'MV / video', status: 'missing' },
-    { id: 'description', label: 'Description / tags', status: 'draft' },
-    { id: 'credits', label: 'Credits', status: 'draft' },
-    { id: 'sns', label: 'SNS assets', status: 'missing' },
-  ],
-  illustrator: 'waiting',
-  videoEditor: 'none',
-  mixMaster: 'planned',
-  eventRulesChecked: true,
-  postingWindowChecked: false,
-  creditsChecked: false,
-  promoPlanReady: false,
+const templates: Record<TemplateKey, { label: string; context: string; items: WorkItem[] }> = {
+  festival: {
+    label: '投稿祭 / ボカコレ',
+    context: '締切、投稿ルール、動画、告知を同時に進める制作向け',
+    items: [
+      item('song-a', 'メイン曲案', 'song', 'doing', '自分', 10, 'なし', '2mix試作あり', '構成を固定して仮歌を書き出す'),
+      item('song-b', '保留中の曲案', 'song', 'idea', '自分', 18, 'なし', '8小節モチーフのみ', '採用するか保留するか決める'),
+      item('mix', 'ミックス / マスター', 'audio', 'next', '自分', 7, 'メイン曲案の構成確定', 'ラフのみ', '初回書き出しの期限を決める'),
+      item('movie', '動画 / サムネイル', 'visual', 'waiting', '外注候補', 6, '歌詞・音源・参考資料', '未着手', '最低限の静止画動画にするか決める'),
+      item('rules', '投稿ルール確認', 'release', 'next', '自分', 14, 'イベント公式情報', '未確認', '尺・タグ・投稿期間を確認する'),
+      item('promo', '告知素材', 'promo', 'next', '自分', 4, '動画とURL', '未着手', 'X用文面と短尺素材を1本作る'),
+    ],
+  },
+  contest: {
+    label: 'DTMコンペ / 案件',
+    context: '複数案、要件、提出物、修正条件を管理する制作向け',
+    items: [
+      item('brief', '募集要項 / ブリーフ', 'release', 'review', '自分', 20, 'クライアント/募集ページ', '確認中', '必須条件を未確認リストに落とす'),
+      item('candidate-1', '候補曲 A', 'song', 'doing', '自分', 12, 'なし', 'デモあり', '提出候補として残すか判断する'),
+      item('candidate-2', '候補曲 B', 'song', 'idea', '自分', 14, 'なし', 'モチーフのみ', 'これ以上進めるか止めるか決める'),
+      item('mix', '提出用ミックス', 'audio', 'next', '自分', 5, '候補曲の決定', '未着手', '候補曲を1つに絞って書き出す'),
+      item('delivery', '提出ファイル / 権利表記', 'rights', 'next', '自分', 3, '応募要項', '未整理', 'ファイル形式とクレジットを確認する'),
+    ],
+  },
+  coverMv: {
+    label: '歌ってみた / MV',
+    context: '録音、ミックス、イラスト、動画、権利確認が分かれる制作向け',
+    items: [
+      item('recording', 'ボーカル録音', 'audio', 'doing', '自分', 15, 'オケ・歌詞', 'テイクあり', '採用テイクを選ぶ'),
+      item('mix', 'ミックス依頼', 'audio', 'waiting', 'Mix担当', 10, '音源・BPM・参考曲', '素材不足', '依頼パックの不足を埋める'),
+      item('illustration', 'イラスト', 'visual', 'waiting', '絵師', 12, '構図・納期・使用範囲', 'ラフ待ち', '使用範囲と納品形式を確認する'),
+      item('movie', 'MV編集', 'visual', 'next', '動画担当', 7, '音源・イラスト', '未着手', '最低限の納品物を定義する'),
+      item('rights', '原曲 / クレジット確認', 'rights', 'review', '自分', 20, '原曲情報', '確認中', '概要欄の表記を固める'),
+      item('promo', '公開告知', 'promo', 'next', '自分', 4, 'サムネイル・URL', '未着手', '公開文面を作る'),
+    ],
+  },
+  release: {
+    label: '配信リリース',
+    context: 'ディストリビューター、メタデータ、審査、ピッチ、告知の準備向け',
+    items: [
+      item('master', '最終音源', 'audio', 'review', '自分', 28, 'なし', 'マスター候補あり', 'ラウドネスと冒頭末尾を確認する'),
+      item('metadata', '曲名 / 権利者 / 歌詞', 'rights', 'next', '自分', 24, '共同制作者確認', '未整理', '表記ゆれと権利者名をそろえる'),
+      item('artwork', 'ジャケット', 'visual', 'waiting', 'デザイナー', 23, 'サイズ・文字入れ規定', 'ラフ待ち', '規定サイズと納品日を確認する'),
+      item('distributor', '配信登録', 'release', 'next', '自分', 21, '音源・メタデータ・ジャケット', '未着手', '審査日数を逆算して登録する'),
+      item('pitch', 'Spotify pitch / EPK', 'promo', 'next', '自分', 14, '配信登録完了', '未着手', 'ピッチ文の初稿を作る'),
+      item('launch', 'SNS / Smart Link', 'promo', 'next', '自分', 5, '配信URL', '未着手', '予約リンク導線を作る'),
+    ],
+  },
+  live: {
+    label: 'ライブ / イベント',
+    context: '曲、リハ、物販、告知、当日準備をまとめる小規模チーム向け',
+    items: [
+      item('setlist', 'セットリスト', 'live', 'review', 'バンド', 18, '出演時間', '候補あり', '曲順と転換を確認する'),
+      item('rehearsal', 'リハーサル', 'live', 'next', 'バンド', 12, 'メンバー予定', '未確定', '候補日を2つに絞る'),
+      item('new-song', '新曲仕上げ', 'song', 'doing', '全員', 10, 'デモ共有', 'ラフあり', '演奏できる尺まで縮める'),
+      item('visual', 'フライヤー / 物販画像', 'visual', 'waiting', 'デザイナー', 9, 'イベント情報', '未着手', '最低限の告知画像を依頼する'),
+      item('promo', '告知 / 予約導線', 'promo', 'next', '自分', 7, '会場URL・画像', '未着手', '予約リンク付き告知を出す'),
+      item('day', '当日持ち物 / セット図', 'live', 'next', '全員', 3, '会場情報', '未整理', '共有できる当日メモを作る'),
+    ],
+  },
 }
 
-const blankProject: ProjectState = {
-  ...sampleProject,
-  projectName: '',
-  deadline: offsetDate(30),
-  goal: '',
-  activeIdeaId: 'idea-1',
-  ideas: [{ id: 'idea-1', title: 'New idea', state: 'keep', note: '' }],
-  lanes: baseLanes,
-  assets: baseAssets,
-  illustrator: 'none',
-  videoEditor: 'none',
-  mixMaster: 'none',
-  eventRulesChecked: false,
-  postingWindowChecked: false,
-  creditsChecked: false,
-  promoPlanReady: false,
-}
-
-const mockFiles: FileTrace[] = [
-  { path: 'Music/Bokacolle/Night_Bus/Night_Bus.logicx', name: 'Night_Bus.logicx', modifiedDaysAgo: 2 },
-  { path: 'Music/Bokacolle/Night_Bus/Night_Bus_demo_v4.wav', name: 'Night_Bus_demo_v4.wav', modifiedDaysAgo: 2 },
-  { path: 'Music/Bokacolle/Night_Bus/Night_Bus_mix_test.mp3', name: 'Night_Bus_mix_test.mp3', modifiedDaysAgo: 4 },
-  { path: 'Music/Bokacolle/Night_Bus/lyrics.txt', name: 'lyrics.txt', modifiedDaysAgo: 6 },
-  { path: 'Music/Bokacolle/Night_Bus/ref_motion_graphic.mov', name: 'ref_motion_graphic.mov', modifiedDaysAgo: 9 },
-  { path: 'Music/Bokacolle/Piano_DnB/piano_dnb_idea.als', name: 'piano_dnb_idea.als', modifiedDaysAgo: 33 },
-  { path: 'Music/Bokacolle/Piano_DnB/piano_dnb_rough.wav', name: 'piano_dnb_rough.wav', modifiedDaysAgo: 33 },
-  { path: 'Music/Bokacolle/Guitar_Motif/guitar_riff_voice_memo.m4a', name: 'guitar_riff_voice_memo.m4a', modifiedDaysAgo: 94 },
-  { path: 'Music/Bokacolle/Guitar_Motif/chord_notes.md', name: 'chord_notes.md', modifiedDaysAgo: 94 },
-  { path: 'Music/Bokacolle/Japanese_EDM/edm_fragment.flp', name: 'edm_fragment.flp', modifiedDaysAgo: 140 },
-  { path: 'Music/Bokacolle/Japanese_EDM/export_001.wav', name: 'export_001.wav', modifiedDaysAgo: 138 },
-  { path: 'Music/Bokacolle/_campaign/artwork_brief.pdf', name: 'artwork_brief.pdf', modifiedDaysAgo: 12 },
-  { path: 'Music/Bokacolle/_campaign/posting_rules.txt', name: 'posting_rules.txt', modifiedDaysAgo: 3 },
+const statusColumns: { id: Status; label: string; hint: string }[] = [
+  { id: 'idea', label: 'アイデア', hint: '保留・候補' },
+  { id: 'next', label: '次にやる', hint: '未着手' },
+  { id: 'doing', label: '作業中', hint: '進行中' },
+  { id: 'waiting', label: '待ち', hint: '外部依存' },
+  { id: 'review', label: '確認中', hint: '見直し' },
+  { id: 'ready', label: '完了', hint: '準備済み' },
 ]
 
-const severityRank: Record<Severity, number> = {
-  critical: 0,
-  warning: 1,
-  ready: 2,
+const kindLabels: Record<WorkKind, string> = {
+  song: '曲',
+  audio: '音源',
+  visual: '映像/画像',
+  promo: '告知',
+  release: '提出/配信',
+  live: 'ライブ',
+  rights: '権利/表記',
 }
 
 function App() {
-  const [project, setProject] = useState<ProjectState>(sampleProject)
-  const [scanReport, setScanReport] = useState<ScanReport | null>(null)
-  const [isLoaded, setIsLoaded] = useState(false)
-  const [storageWarning, setStorageWarning] = useState('')
-  const [saveState, setSaveState] = useState<'Saved' | 'Saving...'>('Saved')
+  const [project, setProject] = useState<Project>(() => readStoredProject())
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateKey>(project.template)
+  const [saved, setSaved] = useState('保存済み')
 
   useEffect(() => {
-    try {
-      const rawProject = window.localStorage.getItem(STORAGE_KEY)
-      const rawReport = window.localStorage.getItem(REPORT_STORAGE_KEY)
-      if (rawProject) setProject(parseProject(JSON.parse(rawProject)))
-      if (rawReport) setScanReport(parseScanReport(JSON.parse(rawReport)))
-    } catch {
-      setStorageWarning('Saved data could not be loaded. You can continue with a fresh project.')
-    } finally {
-      setIsLoaded(true)
-    }
-  }, [])
+    setSaved('保存中')
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(project))
+    const timer = window.setTimeout(() => setSaved('保存済み'), 160)
+    return () => window.clearTimeout(timer)
+  }, [project])
 
-  useEffect(() => {
-    if (!isLoaded) return
-    setSaveState('Saving...')
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(project))
-      if (scanReport) {
-        window.localStorage.setItem(REPORT_STORAGE_KEY, JSON.stringify(serializeScanReport(scanReport)))
-      } else {
-        window.localStorage.removeItem(REPORT_STORAGE_KEY)
-      }
-      setStorageWarning('')
-    } catch {
-      setStorageWarning('This browser cannot save changes. Keep this tab open while validating.')
-    }
-    setSaveState('Saved')
-  }, [isLoaded, project, scanReport])
-
-  const findings = useMemo(() => diagnoseProject(project, scanReport), [project, scanReport])
-  const summary = useMemo(() => summarizeFindings(findings), [findings])
+  const findings = useMemo(() => diagnose(project), [project])
+  const summary = useMemo(() => summarize(findings), [findings])
   const nextFocus = findings.filter((finding) => finding.severity !== 'ready').slice(0, 3)
-  const boardCards = useMemo(() => buildBoard(project), [project])
-  const days = daysUntil(project.deadline)
-  const directoryInputProps = { webkitdirectory: '' }
 
-  function updateProject<Key extends keyof ProjectState>(key: Key, value: ProjectState[Key]) {
+  function applyTemplate(key: TemplateKey) {
+    const template = templates[key]
+    setSelectedTemplate(key)
+    setProject({
+      title: template.label,
+      template: key,
+      deadline: dateOffset(key === 'release' ? 35 : key === 'live' ? 21 : 18),
+      platform: platformFor(key),
+      items: template.items,
+    })
+  }
+
+  function updateProject<Key extends keyof Project>(key: Key, value: Project[Key]) {
     setProject((current) => ({ ...current, [key]: value }))
   }
 
-  function updateIdea(id: string, patch: Partial<Idea>) {
+  function updateItem(id: string, patch: Partial<WorkItem>) {
     setProject((current) => ({
       ...current,
-      ideas: current.ideas.map((idea) => (idea.id === id ? { ...idea, ...patch } : idea)),
+      items: current.items.map((work) => (work.id === id ? { ...work, ...patch } : work)),
     }))
   }
 
-  function updateLane(id: string, status: WorkStatus) {
+  function addRow() {
+    const id = `item-${Date.now()}`
     setProject((current) => ({
       ...current,
-      lanes: current.lanes.map((lane) => (lane.id === id ? { ...lane, status } : lane)),
+      items: [
+        ...current.items,
+        {
+          id,
+          title: '新しい制作項目',
+          kind: 'song',
+          status: 'next',
+          owner: '自分',
+          due: dateOffset(7),
+          dependency: 'なし',
+          asset: '未整理',
+          nextAction: '次に必要な1アクションを書く',
+        },
+      ],
     }))
   }
 
-  function updateAsset(id: string, status: AssetStatus) {
+  function addRecoveredRows() {
     setProject((current) => ({
       ...current,
-      assets: current.assets.map((asset) => (asset.id === id ? { ...asset, status } : asset)),
+      items: [
+        ...current.items,
+        item('recovered-night-bus', '復元候補: Night Bus', 'song', 'review', '自分', 14, 'なし', 'logicx / demo / lyricsあり', 'この企画で使うか保留するか判断する'),
+        item('recovered-guitar', '復元候補: Guitar Motif', 'song', 'idea', '自分', 30, 'なし', 'ボイスメモのみ', '別プロジェクトに回すか決める'),
+      ],
     }))
-  }
-
-  function updateDependency(id: 'illustrator' | 'videoEditor' | 'mixMaster', status: DependencyStatus) {
-    setProject((current) => ({ ...current, [id]: status }))
-  }
-
-  function updateRule(id: 'eventRulesChecked' | 'postingWindowChecked' | 'creditsChecked' | 'promoPlanReady', checked: boolean) {
-    setProject((current) => ({ ...current, [id]: checked }))
-  }
-
-  function applyRecovery(report: ScanReport) {
-    setScanReport(report)
-    setProject(projectFromScan(report))
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
-
-  function recoverDemoFolder() {
-    applyRecovery(analyzeFiles(mockFiles, 'Demo folder'))
-  }
-
-  async function recoverSelectedFolder(event: ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(event.target.files ?? [])
-    if (files.length === 0) return
-    const traces = files.map((file) => ({
-      path: file.webkitRelativePath || file.name,
-      name: file.name,
-      modifiedDaysAgo: Math.max(0, Math.round((Date.now() - file.lastModified) / 86_400_000)),
-    }))
-    applyRecovery(analyzeFiles(traces, 'Selected local folder'))
-    event.target.value = ''
-  }
-
-  function loadSample() {
-    setProject(sampleProject)
-    setScanReport(null)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
-
-  function resetProject() {
-    setProject(blankProject)
-    setScanReport(null)
   }
 
   return (
-    <main className="app-shell">
-      <header className="topbar">
-        <div>
-          <p className="eyebrow">Music project recovery</p>
-          <h1>Music Deadline Studio</h1>
-        </div>
-        <div className="topbar-actions">
-          <span className="save-state" aria-live="polite">{saveState}</span>
-          <button className="secondary" type="button" onClick={loadSample}>Sample board</button>
-          <button className="ghost" type="button" onClick={resetProject}>Reset</button>
-        </div>
-      </header>
-
-      {storageWarning && <p className="alert">{storageWarning}</p>}
-
-      <section className="recovery-panel" aria-label="Folder recovery">
-        <div>
-          <span className="panel-kicker">Passive capture prototype</span>
-          <h2>Start from a messy music folder, not a blank task board.</h2>
-          <p>
-            This demo infers song ideas, assets, progress, dormant sketches, and missing release materials from file names,
-            extensions, and timestamps. No audio content is read.
-          </p>
-        </div>
-        <div className="recovery-actions">
-          <button className="primary" type="button" onClick={recoverDemoFolder}>Recover demo folder</button>
-          <label className="file-picker">
-            Choose local folder
-            <input type="file" multiple {...directoryInputProps} onChange={recoverSelectedFolder} />
-          </label>
-        </div>
-      </section>
-
-      {scanReport && (
-        <section className="scan-report" aria-label="Recovered folder insights">
-          <div className="section-heading">
-            <div>
-              <span className="panel-kicker">Recovered state</span>
-              <h2>{scanReport.source}: {scanReport.groups.length} song/workstream groups</h2>
-            </div>
-            <p className="board-context">{scanReport.filesAnalyzed} files analyzed locally by file trace.</p>
+    <div className="workspace-shell">
+      <aside className="sidebar" aria-label="ナビゲーション">
+        <div className="brand">
+          <span className="brand-mark">MC</span>
+          <div>
+            <strong>Music Campaign</strong>
+            <small>Board MVP</small>
           </div>
-          <div className="insight-grid">
-            {scanReport.insights.map((insight) => <article key={insight}>{insight}</article>)}
+        </div>
+        <nav>
+          <a className="active" href="#board">制作ボード</a>
+          <a href="#diagnosis">リスク診断</a>
+          <a href="#templates">テンプレート</a>
+          <a href="#recovery">フォルダ復元実験</a>
+        </nav>
+      </aside>
+
+      <main className="main">
+        <header className="page-header">
+          <div>
+            <p className="eyebrow">短期MVP</p>
+            <h1>音楽制作カンバン</h1>
+            <p>曲、素材、告知、提出準備を並べて、止まっている場所と次の一手を確認します。</p>
           </div>
-          <div className="song-table" aria-label="Detected song groups">
-            <div className="song-table-header">
-              <span>Detected group</span>
-              <span>Stage</span>
-              <span>Assets found</span>
-              <span>Last touched</span>
-            </div>
-            {scanReport.groups.map((group) => (
-              <div className="song-table-row" key={group.id}>
-                <strong>{group.title}</strong>
-                <span>{group.stage}</span>
-                <span>{Array.from(group.kinds).join(', ') || 'unknown'}</span>
-                <span>{group.lastTouchedDaysAgo} days ago</span>
-              </div>
+          <div className="header-actions">
+            <span aria-live="polite" className="save-state">{saved}</span>
+            <button className="secondary" type="button" onClick={() => applyTemplate(project.template)}>サンプルに戻す</button>
+            <button className="primary" type="button" onClick={addRow}>行を追加</button>
+          </div>
+        </header>
+
+        <section className={`summary-bar summary-${summary.overall}`} aria-label="プロジェクト概要">
+          <div className="project-fields">
+            <label>
+              プロジェクト名
+              <input value={project.title} onChange={(event) => updateProject('title', event.target.value)} />
+            </label>
+            <label>
+              締切
+              <input type="date" value={project.deadline} onChange={(event) => updateProject('deadline', event.target.value)} />
+            </label>
+            <label>
+              公開先 / 場所
+              <input value={project.platform} onChange={(event) => updateProject('platform', event.target.value)} />
+            </label>
+          </div>
+          <div className="metrics" aria-label="診断サマリー">
+            <Metric label="総合" value={severityLabel(summary.overall)} />
+            <Metric label="残日数" value={`${daysUntil(project.deadline)}日`} />
+            <Metric label="Critical" value={`${summary.critical}`} />
+            <Metric label="Warning" value={`${summary.warning}`} />
+          </div>
+        </section>
+
+        <section className="toolbar" id="templates" aria-label="テンプレート">
+          <div>
+            <h2>テンプレート</h2>
+            <p>{templates[selectedTemplate].context}</p>
+          </div>
+          <div className="template-tabs" role="tablist" aria-label="テンプレートを選ぶ">
+            {(Object.keys(templates) as TemplateKey[]).map((key) => (
+              <button
+                aria-selected={selectedTemplate === key}
+                className={selectedTemplate === key ? 'tab active' : 'tab'}
+                key={key}
+                onClick={() => setSelectedTemplate(key)}
+                role="tab"
+                type="button"
+              >
+                {templates[key].label}
+              </button>
             ))}
           </div>
-        </section>
-      )}
-
-      <section className={`command-bar overall-${summary.overall}`} aria-label="Project summary and risk summary">
-        <div className="project-fields">
-          <label>
-            Project
-            <input value={project.projectName} onChange={(event) => updateProject('projectName', event.target.value)} placeholder="Bokacolle summer campaign" />
-          </label>
-          <label>
-            Deadline
-            <input type="date" value={project.deadline} onChange={(event) => updateProject('deadline', event.target.value)} />
-          </label>
-          <label>
-            Type
-            <select aria-label="Event type" value={project.eventType} onChange={(event) => updateProject('eventType', event.target.value as EventType)}>
-              <option value="festival">Festival / posting event</option>
-              <option value="contest">DTM contest / client brief</option>
-              <option value="cover-mv">Cover / MV</option>
-              <option value="release">Distribution release</option>
-              <option value="live">Live / band campaign</option>
-            </select>
-          </label>
-          <label>
-            Platform
-            <input value={project.platform} onChange={(event) => updateProject('platform', event.target.value)} placeholder="NicoNico / YouTube" />
-          </label>
-        </div>
-        <div className="readiness-strip">
-          <Metric label="Readiness" value={severityLabel(summary.overall)} />
-          <Metric label="Days" value={`${days}`} />
-          <Metric label="Critical" value={`${summary.critical}`} />
-          <Metric label="Warning" value={`${summary.warning}`} />
-        </div>
-      </section>
-
-      <section className="main-layout">
-        <section className="board-panel" aria-label="Production kanban">
-          <div className="section-heading">
-            <div>
-              <span className="panel-kicker">Campaign board</span>
-              <h2>Recovered music workflow</h2>
-            </div>
-            <p className="board-context">{project.goal || 'Move the recovered cards as the project becomes clearer.'}</p>
-          </div>
-          <div className="kanban-board">
-            {columns.map((column) => {
-              const cards = boardCards.filter((card) => card.column === column.id)
-              return (
-                <section className="kanban-column" aria-label={`${column.title} column`} key={column.id}>
-                  <header className="column-header">
-                    <div>
-                      <h3>{column.title}</h3>
-                      <span>{column.subtitle}</span>
-                    </div>
-                    <strong>{cards.length}</strong>
-                  </header>
-                  <div className="card-stack">
-                    {cards.map((card) => (
-                      <BoardCardView
-                        card={card}
-                        key={card.id}
-                        onAssetChange={updateAsset}
-                        onDependencyChange={updateDependency}
-                        onIdeaChange={updateIdea}
-                        onLaneChange={updateLane}
-                        onRuleChange={updateRule}
-                        onSetActiveIdea={(id) => updateProject('activeIdeaId', id)}
-                      />
-                    ))}
-                  </div>
-                </section>
-              )
-            })}
-          </div>
+          <button className="secondary" type="button" onClick={() => applyTemplate(selectedTemplate)}>テンプレートを適用</button>
         </section>
 
-        <aside className="right-rail">
-          <section className="panel sticky" aria-label="Next focus">
-            <div className="section-heading">
+        <div className="content-grid">
+          <section className="board-area" id="board" aria-label="制作カンバン">
+            <div className="section-title">
               <div>
-                <span className="panel-kicker">Next focus</span>
-                <h2>Cards to move next</h2>
+                <h2>ワークストリーム</h2>
+                <p>曲だけでなく、動画、告知、提出、ライブ準備も同じボードで扱えます。</p>
               </div>
             </div>
-            <ol className="focus-list">
-              {nextFocus.length > 0 ? nextFocus.map((finding) => (
-                <li key={finding.id}>
-                  <span className={`severity-dot severity-${finding.severity}`} />
-                  <div>
-                    <strong>{finding.action}</strong>
-                    <small>{finding.sourceCard ? `Caused by: ${finding.sourceCard}` : finding.title}</small>
-                  </div>
-                </li>
-              )) : (
-                <li>
-                  <span className="severity-dot severity-ready" />
-                  <div>
-                    <strong>Keep updating the board</strong>
-                    <small>No major risk is visible from current traces.</small>
-                  </div>
-                </li>
-              )}
-            </ol>
-          </section>
-
-          <section className="panel" aria-label="Risk diagnosis results">
-            <div className="section-heading">
-              <div>
-                <span className="panel-kicker">Risk diagnosis</span>
-                <h2>Why it may fail</h2>
-              </div>
-            </div>
-            <div className="risk-list">
-              {findings.slice(0, 6).map((finding) => (
-                <article className={`risk-card risk-${finding.severity}`} key={finding.id}>
-                  <div className="risk-topline">
-                    <span className={`severity-pill severity-${finding.severity}`}>{severityLabel(finding.severity)}</span>
-                    <span className="priority-pill">{finding.priority}</span>
-                  </div>
-                  <h3>{finding.title}</h3>
-                  <dl>
-                    <div>
-                      <dt>Signal</dt>
-                      <dd>{finding.signal}</dd>
-                    </div>
-                    {finding.sourceCard && (
+            <div className="kanban" aria-label="状態別カンバン">
+              {statusColumns.map((column) => {
+                const cards = project.items.filter((work) => work.status === column.id)
+                return (
+                  <section className="kanban-column" key={column.id} aria-label={`${column.label}列`}>
+                    <header>
                       <div>
-                        <dt>Cause card</dt>
-                        <dd>{finding.sourceCard}</dd>
+                        <h3>{column.label}</h3>
+                        <span>{column.hint}</span>
                       </div>
-                    )}
-                    <div>
-                      <dt>Next action</dt>
-                      <dd>{finding.action}</dd>
+                      <strong>{cards.length}</strong>
+                    </header>
+                    <div className="kanban-stack">
+                      {cards.length === 0 ? <p className="empty">該当なし</p> : cards.map((work) => (
+                        <article className={`work-card kind-${work.kind}`} key={work.id}>
+                          <div className="card-line">
+                            <span>{kindLabels[work.kind]}</span>
+                            <small>{formatDue(work.due)}</small>
+                          </div>
+                          <h4>{work.title}</h4>
+                          <p>{work.nextAction}</p>
+                          <select
+                            aria-label={`${work.title}の状態`}
+                            value={work.status}
+                            onChange={(event) => updateItem(work.id, { status: event.target.value as Status })}
+                          >
+                            {statusColumns.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+                          </select>
+                        </article>
+                      ))}
                     </div>
-                  </dl>
-                </article>
-              ))}
+                  </section>
+                )
+              })}
+            </div>
+
+            <div className="work-table-wrap" aria-label="制作項目一覧">
+              <table>
+                <caption>制作項目の詳細</caption>
+                <thead>
+                  <tr>
+                    <th>項目</th>
+                    <th>種別</th>
+                    <th>状態</th>
+                    <th>担当</th>
+                    <th>期限</th>
+                    <th>待ち / 依存</th>
+                    <th>素材状態</th>
+                    <th>次アクション</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {project.items.map((work) => (
+                    <tr key={work.id}>
+                      <td>
+                        <input
+                          aria-label={`${work.title}の項目名`}
+                          value={work.title}
+                          onChange={(event) => updateItem(work.id, { title: event.target.value })}
+                        />
+                      </td>
+                      <td>
+                        <select
+                          aria-label={`${work.title}の種別`}
+                          value={work.kind}
+                          onChange={(event) => updateItem(work.id, { kind: event.target.value as WorkKind })}
+                        >
+                          {(Object.keys(kindLabels) as WorkKind[]).map((kind) => <option key={kind} value={kind}>{kindLabels[kind]}</option>)}
+                        </select>
+                      </td>
+                      <td>
+                        <select
+                          aria-label={`${work.title}の一覧状態`}
+                          value={work.status}
+                          onChange={(event) => updateItem(work.id, { status: event.target.value as Status })}
+                        >
+                          {statusColumns.map((status) => <option key={status.id} value={status.id}>{status.label}</option>)}
+                        </select>
+                      </td>
+                      <td><input aria-label={`${work.title}の担当`} value={work.owner} onChange={(event) => updateItem(work.id, { owner: event.target.value })} /></td>
+                      <td><input aria-label={`${work.title}の期限`} type="date" value={work.due} onChange={(event) => updateItem(work.id, { due: event.target.value })} /></td>
+                      <td><input aria-label={`${work.title}の依存`} value={work.dependency} onChange={(event) => updateItem(work.id, { dependency: event.target.value })} /></td>
+                      <td><input aria-label={`${work.title}の素材状態`} value={work.asset} onChange={(event) => updateItem(work.id, { asset: event.target.value })} /></td>
+                      <td><input aria-label={`${work.title}の次アクション`} value={work.nextAction} onChange={(event) => updateItem(work.id, { nextAction: event.target.value })} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </section>
-        </aside>
-      </section>
-    </main>
-  )
-}
 
-function BoardCardView({
-  card,
-  onAssetChange,
-  onDependencyChange,
-  onIdeaChange,
-  onLaneChange,
-  onRuleChange,
-  onSetActiveIdea,
-}: {
-  card: BoardCard
-  onAssetChange: (id: string, status: AssetStatus) => void
-  onDependencyChange: (id: 'illustrator' | 'videoEditor' | 'mixMaster', status: DependencyStatus) => void
-  onIdeaChange: (id: string, patch: Partial<Idea>) => void
-  onLaneChange: (id: string, status: WorkStatus) => void
-  onRuleChange: (id: 'eventRulesChecked' | 'postingWindowChecked' | 'creditsChecked' | 'promoPlanReady', checked: boolean) => void
-  onSetActiveIdea: (id: string) => void
-}) {
-  return (
-    <article className={`board-card card-${card.kind}`}>
-      <div className="card-topline">
-        <span>{kindLabel(card.kind)}</span>
-        {card.kind === 'idea' && card.active && <strong>Active</strong>}
-      </div>
-      <h4>{card.title}</h4>
-      <p>{card.note}</p>
-      <small>{card.meta}</small>
+          <aside className="right-panel" id="diagnosis" aria-label="リスク診断">
+            <section>
+              <h2>次に見るべきこと</h2>
+              <ol className="focus-list">
+                {nextFocus.length > 0 ? nextFocus.map((finding) => (
+                  <li key={finding.id}>
+                    <span className={`dot ${finding.severity}`} />
+                    <div>
+                      <strong>{finding.action}</strong>
+                      <small>{finding.source}</small>
+                    </div>
+                  </li>
+                )) : (
+                  <li>
+                    <span className="dot ready" />
+                    <div>
+                      <strong>大きな未対応リスクは見えていません</strong>
+                      <small>次の更新で状態が変わったら再診断されます。</small>
+                    </div>
+                  </li>
+                )}
+              </ol>
+            </section>
 
-      {card.kind === 'idea' && (
-        <div className="card-controls">
-          <select aria-label={`${card.title} state`} value={card.state} onChange={(event) => onIdeaChange(card.ideaId, { state: event.target.value as IdeaState })}>
-            <option value="keep">Keep</option>
-            <option value="maybe">Maybe</option>
-            <option value="parked">Parked</option>
-            <option value="rejected">Rejected</option>
-          </select>
-          <button className="mini-button" type="button" onClick={() => onSetActiveIdea(card.ideaId)}>Use</button>
+            <section>
+              <h2>Readiness診断</h2>
+              <div className="finding-list">
+                {findings.map((finding) => (
+                  <article className={`finding ${finding.severity}`} key={finding.id}>
+                    <div className="finding-head">
+                      <span>{severityLabel(finding.severity)}</span>
+                      <small>{finding.source}</small>
+                    </div>
+                    <h3>{finding.title}</h3>
+                    <dl>
+                      <div>
+                        <dt>なぜ危ないか</dt>
+                        <dd>{finding.why}</dd>
+                      </div>
+                      <div>
+                        <dt>次にやること</dt>
+                        <dd>{finding.action}</dd>
+                      </div>
+                    </dl>
+                  </article>
+                ))}
+              </div>
+            </section>
+          </aside>
         </div>
-      )}
 
-      {card.kind === 'lane' && (
-        <select aria-label={card.title} value={card.status} onChange={(event) => onLaneChange(card.laneId, event.target.value as WorkStatus)}>
-          <option value="not-started">Not started</option>
-          <option value="in-progress">In progress</option>
-          <option value="blocked">Blocked</option>
-          <option value="done">Done</option>
-        </select>
-      )}
-
-      {card.kind === 'asset' && (
-        <select aria-label={card.title} value={card.status} onChange={(event) => onAssetChange(card.assetId, event.target.value as AssetStatus)}>
-          <option value="missing">Missing</option>
-          <option value="draft">Draft</option>
-          <option value="ready">Ready</option>
-        </select>
-      )}
-
-      {card.kind === 'dependency' && (
-        <select aria-label={`${card.title} dependency`} value={card.status} onChange={(event) => onDependencyChange(card.dependencyId, event.target.value as DependencyStatus)}>
-          <option value="none">None</option>
-          <option value="planned">Planned</option>
-          <option value="waiting">Waiting</option>
-          <option value="received">Received</option>
-        </select>
-      )}
-
-      {card.kind === 'rule' && (
-        <label className="card-checkbox">
-          <input
-            aria-label={`${card.title} checked`}
-            checked={card.checked}
-            onChange={(event) => onRuleChange(card.ruleId, event.target.checked)}
-            type="checkbox"
-          />
-          Checked
-        </label>
-      )}
-    </article>
+        <section className="recovery-experiment" id="recovery" aria-label="フォルダ復元実験">
+          <div>
+            <h2>フォルダ復元実験</h2>
+            <p>中長期仮説として、散らばった音源ファイルから曲候補を復元してボードに追加する導線です。短期MVPでは補助扱いに留めます。</p>
+          </div>
+          <button className="secondary" type="button" onClick={addRecoveredRows}>デモ候補を追加</button>
+        </section>
+      </main>
+    </div>
   )
 }
 
@@ -610,550 +438,134 @@ function Metric({ label, value }: { label: string; value: string }) {
   )
 }
 
-function analyzeFiles(files: FileTrace[], source: string): ScanReport {
-  const groups = groupFiles(files)
-  const insights = buildScanInsights(groups, files.length)
-  return { source, groups, insights, filesAnalyzed: files.length }
-}
-
-function groupFiles(files: FileTrace[]): SongGroup[] {
-  const map = new Map<string, FileTrace[]>()
-  for (const file of files) {
-    const groupName = inferGroupName(file.path, file.name)
-    map.set(groupName, [...(map.get(groupName) ?? []), file])
-  }
-
-  return Array.from(map.entries())
-    .filter(([title]) => !title.startsWith('_'))
-    .map(([title, groupFiles], index) => {
-      const kinds = new Set(groupFiles.map((file) => classifyFile(file.name)).filter(Boolean) as AssetKind[])
-      return {
-        id: `group-${index + 1}`,
-        title: titleFromSlug(title),
-        files: groupFiles,
-        kinds,
-        lastTouchedDaysAgo: Math.min(...groupFiles.map((file) => file.modifiedDaysAgo)),
-        stage: inferStage(kinds),
-      }
-    })
-    .sort((a, b) => a.lastTouchedDaysAgo - b.lastTouchedDaysAgo)
-}
-
-function buildScanInsights(groups: SongGroup[], fileCount: number) {
-  const insights = [
-    `${fileCount} files became ${groups.length} song/workstream groups without manual card creation.`,
-  ]
-  const active = groups.find((group) => group.lastTouchedDaysAgo <= 7)
-  const dormant = groups.find((group) => group.lastTouchedDaysAgo >= 60)
-  const nearRelease = groups.find((group) => group.kinds.has('mix') && !group.kinds.has('artwork') && !group.kinds.has('video'))
-
-  if (active) insights.push(`${active.title} looks active now: touched ${active.lastTouchedDaysAgo} days ago and estimated as ${active.stage}.`)
-  if (dormant) insights.push(`${dormant.title} looks dormant but recoverable: last touched ${dormant.lastTouchedDaysAgo} days ago.`)
-  if (nearRelease) insights.push(`${nearRelease.title} has mix progress but no artwork/video trace, so release packaging may be the next gap.`)
-  if (!nearRelease) insights.push('No group looks release-ready yet; the board should start with production and asset recovery.')
-
-  return insights.slice(0, 4)
-}
-
-function projectFromScan(report: ScanReport): ProjectState {
-  const ideas = report.groups.slice(0, 4).map<Idea>((group, index) => ({
-    id: `idea-${index + 1}`,
-    title: group.title,
-    state: index === 0 ? 'keep' : group.lastTouchedDaysAgo >= 60 ? 'parked' : 'maybe',
-    note: `${group.stage}. Found ${group.files.length} files: ${Array.from(group.kinds).join(', ') || 'unknown'}.`,
-  }))
-  const active = ideas[0]
-  const activeGroup = report.groups[0]
-  const activeKinds = activeGroup?.kinds ?? new Set<AssetKind>()
-
-  return {
-    projectName: `${report.source} recovery`,
-    eventType: 'festival',
-    deadline: offsetDate(21),
-    platform: 'NicoNico / YouTube / DSP',
-    goal: 'Recover existing sketches and turn the most promising work into a deadline-ready campaign board.',
-    activeIdeaId: active?.id ?? 'idea-1',
-    ideas: ideas.length > 0 ? ideas : blankProject.ideas,
-    lanes: [
-      { id: 'composition', label: 'Composition / topline', status: activeKinds.has('session') || activeKinds.has('demo') ? 'done' : 'not-started' },
-      { id: 'arrangement', label: 'Arrangement', status: activeKinds.has('bounce') || activeKinds.has('mix') || activeKinds.has('master') ? 'done' : 'in-progress' },
-      { id: 'vocal', label: 'Vocal / recording', status: activeKinds.has('lyrics') && activeKinds.has('demo') ? 'in-progress' : 'not-started' },
-      { id: 'mix', label: 'Mix / master', status: activeKinds.has('master') ? 'done' : activeKinds.has('mix') ? 'in-progress' : 'not-started' },
-      { id: 'artwork', label: 'Artwork / MV', status: activeKinds.has('artwork') || activeKinds.has('video') ? 'in-progress' : 'not-started' },
-      { id: 'upload', label: 'Upload / submission', status: 'not-started' },
-      { id: 'promotion', label: 'Promotion', status: 'not-started' },
-    ],
-    assets: [
-      { id: 'audio', label: 'Final audio', status: activeKinds.has('master') ? 'ready' : activeKinds.has('mix') || activeKinds.has('bounce') ? 'draft' : 'missing' },
-      { id: 'lyrics', label: 'Lyrics', status: activeKinds.has('lyrics') ? 'ready' : 'missing' },
-      { id: 'artwork', label: 'Artwork / thumbnail', status: activeKinds.has('artwork') ? 'draft' : 'missing' },
-      { id: 'video', label: 'MV / video', status: activeKinds.has('video') ? 'draft' : 'missing' },
-      { id: 'description', label: 'Description / tags', status: 'missing' },
-      { id: 'credits', label: 'Credits', status: 'missing' },
-      { id: 'sns', label: 'SNS assets', status: 'missing' },
-    ],
-    illustrator: activeKinds.has('artwork') ? 'planned' : 'none',
-    videoEditor: activeKinds.has('video') ? 'planned' : 'none',
-    mixMaster: activeKinds.has('mix') || activeKinds.has('master') ? 'received' : 'none',
-    eventRulesChecked: report.groups.some((group) => group.files.some((file) => /rule|guideline|brief/i.test(file.name))),
-    postingWindowChecked: false,
-    creditsChecked: false,
-    promoPlanReady: false,
-  }
-}
-
-function buildBoard(project: ProjectState): BoardCard[] {
-  return [
-    ...project.ideas.map<BoardCard>((idea) => ({
-      id: `idea-${idea.id}`,
-      column: idea.state === 'keep' ? 'doing' : idea.state === 'maybe' ? 'decide' : idea.state === 'parked' ? 'next' : 'ready',
-      kind: 'idea',
-      title: idea.title || 'Untitled idea',
-      meta: ideaStateLabel(idea.state),
-      note: idea.note || 'No note',
-      ideaId: idea.id,
-      state: idea.state,
-      active: project.activeIdeaId === idea.id,
-    })),
-    ...project.lanes.map<BoardCard>((lane) => ({
-      id: `lane-${lane.id}`,
-      column: lane.status === 'blocked' ? 'waiting' : lane.status === 'in-progress' ? 'doing' : lane.status === 'done' ? 'ready' : 'next',
-      kind: 'lane',
-      title: lane.label,
-      meta: statusLabel(lane.status),
-      note: laneNote(lane.id),
-      laneId: lane.id,
-      status: lane.status,
-    })),
-    ...project.assets.map<BoardCard>((asset) => ({
-      id: `asset-${asset.id}`,
-      column: asset.status === 'ready' ? 'ready' : asset.status === 'draft' ? 'doing' : 'next',
-      kind: 'asset',
-      title: asset.label,
-      meta: assetStatusLabel(asset.status),
-      note: assetNote(asset.id),
-      assetId: asset.id,
-      status: asset.status,
-    })),
-    ...dependencyCards(project),
-    ...ruleCards(project),
-  ]
-}
-
-function dependencyCards(project: ProjectState): BoardCard[] {
-  return [
-    dependencyCard('illustrator', 'Illustrator', project.illustrator, 'External visual dependency.'),
-    dependencyCard('videoEditor', 'Video editor', project.videoEditor, 'External MV/video dependency.'),
-    dependencyCard('mixMaster', 'Mix / master support', project.mixMaster, 'External audio dependency.'),
-  ]
-}
-
-function dependencyCard(
-  dependencyId: 'illustrator' | 'videoEditor' | 'mixMaster',
+function item(
+  id: string,
   title: string,
-  status: DependencyStatus,
-  note: string,
-): BoardCard {
-  return {
-    id: `dependency-${dependencyId}`,
-    column: status === 'waiting' ? 'waiting' : status === 'received' ? 'ready' : status === 'planned' ? 'next' : 'decide',
-    kind: 'dependency',
-    title,
-    meta: dependencyLabel(status),
-    note,
-    dependencyId,
-    status,
-  }
+  kind: WorkKind,
+  status: Status,
+  owner: string,
+  dueDays: number,
+  dependency: string,
+  asset: string,
+  nextAction: string,
+): WorkItem {
+  return { id, title, kind, status, owner, due: dateOffset(dueDays), dependency, asset, nextAction }
 }
 
-function ruleCards(project: ProjectState): BoardCard[] {
-  return [
-    ruleCard('eventRulesChecked', 'Event rules / brief', project.eventRulesChecked, 'Posting, contest, or client requirements.'),
-    ruleCard('postingWindowChecked', 'Posting window', project.postingWindowChecked, 'Public timing, upload settings, tags, and platform rules.'),
-    ruleCard('creditsChecked', 'Credits / usage', project.creditsChecked, 'Collaborator names, links, and usage terms.'),
-    ruleCard('promoPlanReady', 'Promotion path', project.promoPlanReady, 'SNS assets, captions, public link, and launch post.'),
-  ]
-}
-
-function ruleCard(
-  ruleId: 'eventRulesChecked' | 'postingWindowChecked' | 'creditsChecked' | 'promoPlanReady',
-  title: string,
-  checked: boolean,
-  note: string,
-): BoardCard {
-  return {
-    id: `rule-${ruleId}`,
-    column: checked ? 'ready' : 'next',
-    kind: 'rule',
-    title,
-    meta: checked ? 'Checked' : 'Needs check',
-    note,
-    ruleId,
-    checked,
-  }
-}
-
-function diagnoseProject(project: ProjectState, report: ScanReport | null) {
-  const days = daysUntil(project.deadline)
+function diagnose(project: Project): Finding[] {
   const findings: Finding[] = []
-  const keepIdeas = project.ideas.filter((idea) => idea.state === 'keep' && idea.title.trim()).length
-  const maybeIdeas = project.ideas.filter((idea) => idea.state === 'maybe' && idea.title.trim()).length
-  const activeIdea = project.ideas.find((idea) => idea.id === project.activeIdeaId)
-  const getLane = (id: string) => project.lanes.find((lane) => lane.id === id)?.status ?? 'not-started'
-  const getAsset = (id: string) => project.assets.find((asset) => asset.id === id)?.status ?? 'missing'
-  const unfinishedCore = ['composition', 'arrangement', 'vocal', 'mix'].filter((id) => getLane(id) !== 'done')
-  const missingLaunchAssets = project.assets.filter((asset) => ['artwork', 'video', 'description', 'credits', 'sns'].includes(asset.id) && asset.status === 'missing')
-  const dormantGroup = report?.groups.find((group) => group.lastTouchedDaysAgo >= 60)
+  const days = daysUntil(project.deadline)
+  const activeWork = project.items.filter((work) => work.status !== 'ready')
+  const waiting = activeWork.filter((work) => work.status === 'waiting')
+  const dueSoon = activeWork.filter((work) => daysUntil(work.due) <= 7)
+  const songItems = project.items.filter((work) => work.kind === 'song')
+  const publicItems = project.items.filter((work) => ['visual', 'promo', 'release', 'rights'].includes(work.kind))
+  const readySongCount = songItems.filter((work) => ['review', 'ready'].includes(work.status)).length
+  const unresolvedAssets = activeWork.filter((work) => /未|不足|待ち|確認中|ラフ/.test(work.asset))
 
-  if (report && dormantGroup) {
-    findings.push({
-      id: 'dormant-idea-found',
-      severity: 'warning',
-      title: 'Dormant idea was recovered from the folder',
-      why: 'Old sketches often disappear inside folders even when they could become useful for a new deadline.',
-      signal: `${dormantGroup.title} was last touched ${dormantGroup.lastTouchedDaysAgo} days ago.`,
-      action: `Review ${dormantGroup.title} and either park it intentionally or promote it to a candidate.`,
-      priority: 'This week',
-      sourceCard: dormantGroup.title,
-    })
+  if (!project.title.trim()) {
+    findings.push(finding('no-title', 'critical', 'プロジェクトの目的が空です', '何に向けた制作か分からないと、曲、素材、告知、提出物の優先順位を診断できません。', 'プロジェクト名に締切やイベント名を入れる', 'プロジェクト名'))
   }
 
-  if (!project.projectName.trim()) {
-    findings.push({
-      id: 'project-name-missing',
-      severity: 'critical',
-      title: 'Project target is unclear',
-      why: 'The board needs a campaign or deadline target to connect songs, assets, dependencies, and readiness.',
-      signal: 'Project is empty.',
-      action: 'Name the campaign or deadline this board is preparing for.',
-      priority: 'Today',
-      sourceCard: 'Project',
-    })
+  if (days < 0) {
+    findings.push(finding('past-deadline', 'critical', '締切が過ぎています', '期限が過去のままだと、今日やるべき項目の判定が崩れます。', '実際の締切へ更新する', '締切'))
+  } else if (days <= 7 && activeWork.length >= 3) {
+    findings.push(finding('too-many-open', 'critical', '締切直前に未完了項目が多すぎます', '音楽制作では最後に書き出し、動画、概要欄、告知が重なりやすく、複数項目が残ると公開直前に破綻します。', '今日動かす項目を3つ以内に絞る', '全体進捗'))
   }
 
-  if (!project.deadline || days < 0) {
-    findings.push({
-      id: 'deadline-invalid',
-      severity: 'critical',
-      title: 'Deadline cannot be diagnosed',
-      why: 'Without a date, the app cannot judge hidden deadlines for mix, artwork, upload, or promotion.',
-      signal: days < 0 ? 'Deadline is in the past.' : 'Deadline is empty.',
-      action: 'Set the real release, submission, live, or posting deadline.',
-      priority: 'Today',
-      sourceCard: 'Deadline',
-    })
+  if (waiting.length > 0) {
+    const urgent = waiting.some((work) => daysUntil(work.due) <= 10)
+    findings.push(finding('external-wait', urgent ? 'critical' : 'warning', '外部依存で止まっている項目があります', 'イラスト、動画、ミックス、メンバー確認の待ちは、自分の作業時間では取り返しにくい遅延になります。', `${waiting[0].title}の不足素材と返信期限を確認する`, waiting.map((work) => work.title).join(' / ')))
   }
 
-  if (keepIdeas === 0) {
-    findings.push({
-      id: 'no-kept-idea',
-      severity: 'critical',
-      title: 'No active candidate is selected',
-      why: 'Recovering many ideas is useful, but a deadline board needs one current candidate to move production forward.',
-      signal: 'No idea is marked Keep.',
-      action: 'Pick one recovered idea as Keep, and park the rest.',
-      priority: 'Today',
-      sourceCard: 'Ideas',
-    })
-  } else if (keepIdeas > 1 && days <= 21) {
-    findings.push({
-      id: 'too-many-kept-ideas',
-      severity: 'warning',
-      title: 'Too many candidates are still active',
-      why: 'Multiple active candidates can keep a creator exploring while downstream assets remain blocked.',
-      signal: `${keepIdeas} ideas are marked Keep.`,
-      action: 'Keep only the main candidate for this deadline.',
-      priority: 'This week',
-      sourceCard: 'Ideas',
-    })
-  } else if (activeIdea?.state === 'keep') {
-    findings.push({
-      id: 'active-idea-ready',
-      severity: 'ready',
-      title: 'A main candidate is visible',
-      why: 'The board can connect production and asset work to a concrete song/workstream.',
-      signal: `Active idea: ${activeIdea.title || 'Untitled idea'}`,
-      action: 'Use this candidate as the anchor for production and packaging.',
-      priority: 'Monitor',
-      sourceCard: activeIdea.title,
-    })
+  if (readySongCount === 0 && days <= 14) {
+    findings.push(finding('no-song-locked', 'critical', '曲の軸がまだ固定されていません', '曲が固まらないまま素材や告知を進めると、後工程のやり直しが増えます。', '採用曲または提出候補を1つに絞る', '曲'))
   }
 
-  if (maybeIdeas > 0 && days <= 10) {
-    findings.push({
-      id: 'maybe-ideas-close-deadline',
-      severity: 'warning',
-      title: 'Undecided ideas remain close to deadline',
-      why: 'A Maybe idea can keep the project open-ended when mix, video, and upload work need certainty.',
-      signal: `${maybeIdeas} ideas are still Maybe.`,
-      action: 'Park Maybe ideas and focus on one candidate for this deadline.',
-      priority: 'Today',
-      sourceCard: 'Ideas',
-    })
+  if (publicItems.some((work) => work.status === 'next') && days <= 10) {
+    findings.push(finding('public-package-late', 'warning', '公開用パッケージが後回しです', 'YouTube、ニコニコ、配信リリースでは音源以外に画像、説明文、タグ、URL、告知素材が必要になります。', '最低限の公開素材を先に作る', '公開準備'))
   }
 
-  if (days <= 14 && unfinishedCore.length >= 2) {
-    findings.push({
-      id: 'core-production-behind',
-      severity: 'critical',
-      title: 'Core production is behind the deadline',
-      why: 'When audio is not locked, artwork, video, upload, and promotion can all inherit the delay.',
-      signal: `Unfinished core lanes: ${unfinishedCore.map((id) => laneLabel(project, id)).join(' / ')}`,
-      action: 'Create a hard date for the export candidate before adding more launch polish.',
-      priority: 'Today',
-      sourceCard: 'Production lanes',
-    })
-  } else if (days <= 21 && getLane('mix') === 'not-started') {
-    findings.push({
-      id: 'mix-not-started',
-      severity: 'warning',
-      title: 'Mix / master has not started',
-      why: 'The scan may find demos, but release readiness depends on a candidate mix or master.',
-      signal: 'Mix / master is Not started.',
-      action: 'Move Mix / master to Working and create the first export candidate.',
-      priority: 'This week',
-      sourceCard: 'Mix / master',
-    })
+  if (unresolvedAssets.length >= 2) {
+    findings.push(finding('asset-unclear', 'warning', '素材状態が曖昧な項目が複数あります', '未整理のままだと、必要なファイルがあるかではなく、探す作業に時間を使うことになります。', `${unresolvedAssets[0].title}から素材の有無を確定する`, '素材状態'))
   }
 
-  if (getLane('artwork') === 'blocked' || project.illustrator === 'waiting') {
-    findings.push({
-      id: 'artwork-external-wait',
-      severity: days <= 28 ? 'critical' : 'warning',
-      title: 'Artwork / MV is a deadline dependency',
-      why: 'Visual assets often create a hidden deadline before the public posting or release date.',
-      signal: `Artwork lane: ${statusLabel(getLane('artwork'))}, Illustrator: ${dependencyLabel(project.illustrator)}`,
-      action: 'Confirm the handoff package: audio, lyrics, references, deadline, credits, and usage.',
-      priority: days <= 28 ? 'Today' : 'This week',
-      sourceCard: 'Artwork / MV',
-    })
+  if (dueSoon.length > 0) {
+    findings.push(finding('due-soon', 'warning', '近日中に期限が来る項目があります', '締切前の細かい未完了は見落としやすく、公開直前の判断を増やします。', `${dueSoon[0].title}を今日の最優先にする`, dueSoon.map((work) => work.title).join(' / ')))
   }
 
-  if ((project.eventType === 'festival' || project.eventType === 'cover-mv') && getAsset('video') === 'missing' && days <= 21) {
-    findings.push({
-      id: 'video-missing',
-      severity: 'critical',
-      title: 'No video asset was found',
-      why: 'For NicoNico/YouTube-centered work, final audio is not enough. The public package needs video or a minimum visual upload.',
-      signal: 'MV / video is Missing.',
-      action: 'Decide whether this project needs a full MV or a minimum static-video path.',
-      priority: 'Today',
-      sourceCard: 'MV / video',
-    })
+  if (findings.length === 0) {
+    findings.push(finding('ready', 'ready', 'この時点では大きなリスクは見えていません', '主要項目が完了または確認中に進んでおり、外部待ちも目立ちません。', '状態が変わったらボードを更新する', '全体進捗'))
   }
 
-  if (missingLaunchAssets.length >= 3 && days <= 14) {
-    findings.push({
-      id: 'launch-assets-missing',
-      severity: 'critical',
-      title: 'Multiple launch assets are missing',
-      why: 'Missing launch assets tend to appear late and turn creative time into searching, writing, and formatting work.',
-      signal: `Missing: ${missingLaunchAssets.map((asset) => asset.label).join(' / ')}`,
-      action: 'Create minimum versions of the missing public assets before more production polishing.',
-      priority: 'Today',
-      sourceCard: 'Launch assets',
-    })
-  } else if (missingLaunchAssets.length > 0) {
-    findings.push({
-      id: 'launch-assets-partial',
-      severity: 'warning',
-      title: 'Some launch assets are missing',
-      why: 'Recovered audio files are useful, but release/event readiness also depends on public-facing materials.',
-      signal: `Missing: ${missingLaunchAssets.map((asset) => asset.label).join(' / ')}`,
-      action: 'Finish missing assets in the order required by the upload or event workflow.',
-      priority: days <= 21 ? 'This week' : 'Before deadline',
-      sourceCard: 'Launch assets',
-    })
-  }
-
-  if (!project.eventRulesChecked) {
-    findings.push({
-      id: 'rules-not-checked',
-      severity: days <= 21 ? 'critical' : 'warning',
-      title: 'Event rules or brief are not checked',
-      why: 'Posting windows, file formats, tags, rankings, or client requirements can invalidate otherwise good work.',
-      signal: 'Event rules / brief is unchecked.',
-      action: 'Check the rules that can make this work ineligible or late.',
-      priority: days <= 21 ? 'Today' : 'This week',
-      sourceCard: 'Event rules / brief',
-    })
-  } else {
-    findings.push({
-      id: 'rules-ready',
-      severity: 'ready',
-      title: 'Rules or brief are checked',
-      why: 'The board can now judge production work against a known campaign context.',
-      signal: 'Event rules / brief is checked.',
-      action: 'Recheck only if the event or client brief changes.',
-      priority: 'Monitor',
-      sourceCard: 'Event rules / brief',
-    })
-  }
-
-  if (!project.promoPlanReady && days <= 14) {
-    findings.push({
-      id: 'promo-not-ready',
-      severity: 'warning',
-      title: 'Promotion path is not ready',
-      why: 'Creators often finish audio first, then lose release momentum because public posts and links are late.',
-      signal: 'Promotion path is unchecked.',
-      action: 'Prepare one launch post, one short clip/image, and one stable public link.',
-      priority: 'This week',
-      sourceCard: 'Promotion path',
-    })
-  }
-
-  return findings.sort((a, b) => severityRank[a.severity] - severityRank[b.severity])
+  return findings.sort((a, b) => severityRank(a.severity) - severityRank(b.severity))
 }
 
-function summarizeFindings(findings: Finding[]) {
+function finding(id: string, severity: Severity, title: string, why: string, action: string, source: string): Finding {
+  return { id, severity, title, why, action, source }
+}
+
+function summarize(findings: Finding[]) {
   const critical = findings.filter((finding) => finding.severity === 'critical').length
   const warning = findings.filter((finding) => finding.severity === 'warning').length
   const ready = findings.filter((finding) => finding.severity === 'ready').length
-  const overall: Severity = critical > 0 ? 'critical' : warning > 0 ? 'warning' : 'ready'
-
-  return { critical, warning, ready, overall }
+  return { critical, warning, ready, overall: critical > 0 ? 'critical' : warning > 0 ? 'warning' : 'ready' as Severity }
 }
 
-function inferGroupName(path: string, name: string) {
-  const parts = path.split(/[\\/]/).filter(Boolean)
-  if (parts.length >= 2) return parts[parts.length - 2]
-  return name.replace(/\.[^.]+$/, '').replace(/(_|-)?(demo|rough|mix|master|bounce|lyrics|ref|reference|stems?).*$/i, '')
+function readStoredProject(): Project {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY)
+    if (raw) return normalizeProject(JSON.parse(raw))
+  } catch {
+    // 壊れた保存データは捨てて、検証用サンプルから始める。
+  }
+  return sampleProject()
 }
 
-function classifyFile(name: string): AssetKind | null {
-  const lower = name.toLowerCase()
-  if (/\.(logicx|als|flp|cpr|band|ptx|rpp)$/.test(lower)) return 'session'
-  if (/stem|stems/.test(lower)) return 'stems'
-  if (/master/.test(lower)) return 'master'
-  if (/mix/.test(lower)) return 'mix'
-  if (/bounce|export|2mix/.test(lower)) return 'bounce'
-  if (/demo|rough|idea|memo/.test(lower) || /\.(wav|mp3|m4a|aiff|flac)$/.test(lower)) return 'demo'
-  if (/lyric|lyrics|歌詞/.test(lower) || /\.(txt|md|docx)$/.test(lower)) return 'lyrics'
-  if (/art|jacket|cover|thumb|thumbnail|illust/.test(lower) || /\.(png|jpg|jpeg|psd|ai)$/.test(lower)) return 'artwork'
-  if (/mv|video|movie/.test(lower) || /\.(mov|mp4|avi|prproj)$/.test(lower)) return 'video'
-  if (/ref|reference|brief|rule|guideline/.test(lower) || /\.(pdf)$/.test(lower)) return 'reference'
-  return null
-}
-
-function inferStage(kinds: Set<AssetKind>) {
-  if (kinds.has('master')) return 'master/package prep'
-  if (kinds.has('mix')) return 'mix candidate'
-  if (kinds.has('bounce') || kinds.has('stems')) return 'arrangement/export'
-  if (kinds.has('demo') && kinds.has('session')) return 'demo in production'
-  if (kinds.has('demo') || kinds.has('session')) return 'sketch/demo'
-  return 'unknown'
-}
-
-function titleFromSlug(value: string) {
-  return value.replace(/[_-]+/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
-}
-
-function parseProject(value: unknown): ProjectState {
-  const record = value as Partial<ProjectState>
+function normalizeProject(value: unknown): Project {
+  const record = value as Partial<Project>
+  const template = record.template && templates[record.template] ? record.template : 'festival'
   return {
-    ...sampleProject,
-    ...record,
-    ideas: mergeById(sampleProject.ideas, record.ideas),
-    lanes: mergeById(sampleProject.lanes, record.lanes),
-    assets: mergeById(sampleProject.assets, record.assets),
+    title: record.title || templates[template].label,
+    template,
+    deadline: record.deadline || dateOffset(18),
+    platform: record.platform || platformFor(template),
+    items: Array.isArray(record.items) && record.items.length > 0 ? record.items.map(normalizeItem) : templates[template].items,
   }
 }
 
-function parseScanReport(value: unknown): ScanReport | null {
-  const record = value as { source?: string; filesAnalyzed?: number; groups?: Array<Omit<SongGroup, 'kinds'> & { kinds: AssetKind[] }>; insights?: string[] }
-  if (!record.source || !record.groups) return null
+function normalizeItem(value: Partial<WorkItem>): WorkItem {
   return {
-    source: record.source,
-    filesAnalyzed: record.filesAnalyzed ?? 0,
-    insights: record.insights ?? [],
-    groups: record.groups.map((group) => ({ ...group, kinds: new Set(group.kinds) })),
+    id: value.id || `item-${Date.now()}`,
+    title: value.title || '未整理の項目',
+    kind: value.kind || 'song',
+    status: value.status || 'next',
+    owner: value.owner || '自分',
+    due: value.due || dateOffset(7),
+    dependency: value.dependency || 'なし',
+    asset: value.asset || '未整理',
+    nextAction: value.nextAction || '次に必要な1アクションを書く',
   }
 }
 
-function serializeScanReport(report: ScanReport) {
+function sampleProject(): Project {
   return {
-    ...report,
-    groups: report.groups.map((group) => ({ ...group, kinds: Array.from(group.kinds) })),
+    title: templates.festival.label,
+    template: 'festival',
+    deadline: dateOffset(18),
+    platform: platformFor('festival'),
+    items: templates.festival.items,
   }
 }
 
-function mergeById<T extends { id: string }>(base: T[], incoming?: T[]) {
-  if (!incoming) return base
-  return base.map((item) => ({ ...item, ...incoming.find((next) => next.id === item.id) }))
-}
-
-function kindLabel(kind: BoardCard['kind']) {
+function platformFor(key: TemplateKey) {
   return {
-    idea: 'Idea',
-    lane: 'Work',
-    asset: 'Asset',
-    dependency: 'Wait',
-    rule: 'Rule',
-  }[kind]
-}
-
-function laneNote(id: string) {
-  return {
-    composition: 'Core musical idea or topline.',
-    arrangement: 'Structure and density toward a finished track.',
-    vocal: 'Voice, recording, or vocal editing.',
-    mix: 'Candidate mix or master export.',
-    artwork: 'Public visual surface.',
-    upload: 'Submission or platform upload.',
-    promotion: 'Launch copy, clips, and public links.',
-  }[id] ?? 'Production work.'
-}
-
-function assetNote(id: string) {
-  return {
-    audio: 'Final or candidate audio for release/submission.',
-    lyrics: 'Lyrics for video, captions, and credits.',
-    artwork: 'Cover, thumbnail, or announcement image.',
-    video: 'NicoNico/YouTube/MV public asset.',
-    description: 'Description, tags, links, and post text.',
-    credits: 'Collaborators and usage terms.',
-    sns: 'Launch posts, clips, and short assets.',
-  }[id] ?? 'Public asset.'
-}
-
-function laneLabel(project: ProjectState, id: string) {
-  return project.lanes.find((lane) => lane.id === id)?.label ?? id
-}
-
-function statusLabel(status: WorkStatus) {
-  return {
-    'not-started': 'Not started',
-    'in-progress': 'In progress',
-    blocked: 'Blocked',
-    done: 'Done',
-  }[status]
-}
-
-function assetStatusLabel(status: AssetStatus) {
-  return {
-    missing: 'Missing',
-    draft: 'Draft',
-    ready: 'Ready',
-  }[status]
-}
-
-function dependencyLabel(status: DependencyStatus) {
-  return {
-    none: 'None',
-    planned: 'Planned',
-    waiting: 'Waiting',
-    received: 'Received',
-  }[status]
-}
-
-function ideaStateLabel(state: IdeaState) {
-  return {
-    keep: 'Keep',
-    maybe: 'Maybe',
-    parked: 'Parked',
-    rejected: 'Rejected',
-  }[state]
+    festival: 'ニコニコ / YouTube',
+    contest: 'コンペ提出先',
+    coverMv: 'YouTube / ニコニコ',
+    release: 'Spotify / Apple Music / YouTube Music',
+    live: 'ライブハウス / 配信',
+  }[key]
 }
 
 function severityLabel(severity: Severity) {
@@ -1164,21 +576,31 @@ function severityLabel(severity: Severity) {
   }[severity]
 }
 
+function severityRank(severity: Severity) {
+  return {
+    critical: 0,
+    warning: 1,
+    ready: 2,
+  }[severity]
+}
+
 function daysUntil(dateValue: string) {
-  if (!dateValue) return 0
-  const current = new Date(`${todayISO}T00:00:00`).getTime()
+  const current = new Date(`${today}T00:00:00`).getTime()
   const target = new Date(`${dateValue}T00:00:00`).getTime()
   return Math.ceil((target - current) / 86_400_000)
 }
 
-function toDateInputValue(date: Date) {
-  return date.toISOString().slice(0, 10)
+function formatDue(dateValue: string) {
+  const days = daysUntil(dateValue)
+  if (days < 0) return '期限超過'
+  if (days === 0) return '今日'
+  return `${days}日後`
 }
 
-function offsetDate(days: number) {
-  const next = new Date()
-  next.setDate(next.getDate() + days)
-  return toDateInputValue(next)
+function dateOffset(days: number) {
+  const date = new Date()
+  date.setDate(date.getDate() + days)
+  return date.toISOString().slice(0, 10)
 }
 
 export default App
