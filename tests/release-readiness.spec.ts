@@ -6,51 +6,57 @@ test.beforeEach(async ({ page }) => {
   await page.reload()
 })
 
-test('surfaces event-centered risks and next focus from the sample project', async ({ page }) => {
-  const results = page.getByLabel('リスク診断結果')
-
+test('recovers a campaign board from the demo music folder', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Music Deadline Studio' })).toBeVisible()
-  await expect(page.getByRole('heading', { name: '締切に向けた制作ボード' })).toBeVisible()
-  await expect(page.getByLabel('制作カンバン').getByRole('heading', { name: 'Waiting' })).toBeVisible()
-  await expect(page.getByLabel('プロジェクト概要とリスクサマリー').getByText('Critical').first()).toBeVisible()
-  await expect(results.getByRole('heading', { name: 'Artwork / MV が外部待ちで締切リスクになっています' })).toBeVisible()
-  await expect(results.getByRole('heading', { name: '投稿動画がまだありません' })).toBeVisible()
-  await expect(page.getByRole('heading', { name: '次に動かすカード' })).toBeVisible()
-  await expect(page.getByLabel('次にやること').getByText('依頼先に渡す音源、歌詞、参考、締切、使用範囲を1つのHandoffとして確定してください。')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Start from a messy music folder, not a blank task board.' })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Recover demo folder' }).click()
+
+  await expect(page.getByRole('heading', { name: /Demo folder:/ })).toBeVisible()
+  await expect(page.getByText('files analyzed locally by file trace')).toBeVisible()
+  await expect(page.getByLabel('Detected song groups').getByText('Night Bus')).toBeVisible()
+  await expect(page.getByLabel('Detected song groups').getByText('Guitar Motif')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Recovered music workflow' })).toBeVisible()
+  await expect(page.getByLabel('Production kanban').getByText('Night Bus')).toBeVisible()
 })
 
-test('updates diagnosis when production progress and assets are completed', async ({ page }) => {
-  await page.getByLabel('Artwork / MV', { exact: true }).selectOption('done')
-  await page.getByLabel('Mix / Master', { exact: true }).selectOption('done')
-  await page.getByLabel('MV / 投稿動画', { exact: true }).selectOption('ready')
-  await page.getByLabel('サムネ / ジャケット', { exact: true }).selectOption('ready')
-  await page.getByLabel('SNS告知素材', { exact: true }).selectOption('ready')
-  await page.getByLabel('Illustrator dependency').selectOption('received')
-  await page.getByLabel('Video editor dependency').selectOption('received')
-  await page.getByLabel('投稿期間 / 予約投稿 checked').check()
-  await page.getByLabel('クレジット / 使用条件 checked').check()
-  await page.getByLabel('告知導線 / 初動投稿 checked').check()
+test('shows inferred risks and cause cards after recovery', async ({ page }) => {
+  await page.getByRole('button', { name: 'Recover demo folder' }).click()
 
-  await expect(page.getByText('Artwork / MV が外部待ちで締切リスクになっています')).toBeHidden()
-  await expect(page.getByText('投稿動画がまだありません')).toBeHidden()
+  await expect(page.getByRole('heading', { name: 'Dormant idea was recovered from the folder' })).toBeVisible()
+  await expect(page.getByLabel('Risk diagnosis results').getByText('Cause card').first()).toBeVisible()
+  await expect(page.getByLabel('Next focus').getByText('Review Guitar Motif')).toBeVisible()
 })
 
-test('persists project edits after reload', async ({ page }) => {
-  await page.getByLabel('Project').fill('M3秋向けデモ整理')
-  await page.getByLabel('Event type').selectOption('dtm-contest')
-  await page.getByLabel('Platform').fill('SoundCloud / YouTube')
+test('updates diagnosis when recovered board cards are completed', async ({ page }) => {
+  await page.getByRole('button', { name: 'Recover demo folder' }).click()
+
+  await page.getByLabel('MV / video', { exact: true }).selectOption('ready')
+  await page.getByLabel('Artwork / thumbnail', { exact: true }).selectOption('ready')
+  await page.getByLabel('SNS assets', { exact: true }).selectOption('ready')
+  await page.getByLabel('Mix / master', { exact: true }).selectOption('done')
+  await page.getByLabel('Promotion path checked').check()
+
+  await expect(page.getByText('No video asset was found')).toBeHidden()
+  await expect(page.getByText('Promotion path is not ready')).toBeHidden()
+})
+
+test('persists recovered folder state after reload', async ({ page }) => {
+  await page.getByRole('button', { name: 'Recover demo folder' }).click()
+  await expect(page.getByRole('textbox', { name: 'Project' })).toHaveValue('Demo folder recovery')
+
   await page.reload()
 
-  await expect(page.getByLabel('Project')).toHaveValue('M3秋向けデモ整理')
-  await expect(page.getByLabel('Event type')).toHaveValue('dtm-contest')
-  await expect(page.getByLabel('Platform')).toHaveValue('SoundCloud / YouTube')
+  await expect(page.getByRole('textbox', { name: 'Project' })).toHaveValue('Demo folder recovery')
+  await expect(page.getByRole('heading', { name: /Demo folder:/ })).toBeVisible()
 })
 
-test('supports mobile use without horizontal overflow', async ({ page }) => {
+test('supports mobile recovery view without horizontal overflow', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 })
+  await page.getByRole('button', { name: 'Recover demo folder' }).click()
+
   await expect(page.getByRole('heading', { name: 'Music Deadline Studio' })).toBeVisible()
-  await expect(page.getByRole('heading', { name: '締切に向けた制作ボード' })).toBeVisible()
-  await expect(page.getByRole('heading', { name: '次に動かすカード' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Recovered music workflow' })).toBeVisible()
 
   const hasHorizontalOverflow = await page.evaluate(
     () => document.documentElement.scrollWidth > document.documentElement.clientWidth,

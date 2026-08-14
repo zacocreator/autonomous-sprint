@@ -1,50 +1,49 @@
 # Music Deadline Studio
 
-Music Deadline Studio is a local-first validation MVP for independent music creators working toward a deadline-driven release, contest, posting festival, cover video, MV, or distribution launch.
+Music Deadline Studio is a local-first validation MVP for independent music creators and small music teams. It explores a product direction where creators do not need to start from a blank task board: the app can recover project state from existing music folder traces and turn it into a lightweight campaign board.
 
-The product is not a generic task manager and not a standalone release checklist. The core experience is: move music-specific production cards across a deadline-centered kanban board, then see what is risky, why it matters, and what to focus on next.
+The product is not a generic task manager and not a standalone release checklist. The core experience is: point the app at a music folder, recover song ideas/assets/progress, then see what looks dormant, missing, risky, or ready to move next.
 
 ## Product Goal
 
-Help music creators manage event/deadline-centered production work and naturally derive release readiness from progress, assets, external dependencies, and platform or event rules.
+Help music creators turn messy creative folders into actionable production/campaign state with less manual setup than a generic task management tool.
 
 ## Core Hypothesis
 
-Music creators will value a product that connects daily production work with deadline-specific readiness, because generic tools do not understand music-specific dependencies such as demos, parked ideas, Mix/Master, artwork, MV, credits, posting windows, and promotion assets.
+Music creators will value a workspace that starts from how they already work: DAW sessions, demos, bounces, lyrics, references, artwork, video files, and scattered assets. The app should infer enough structure to create a useful board and surface readiness risks.
 
 ## Target User
 
-- Vocaloid producers preparing for posting festivals such as Bokacolle
-- DTM creators entering contests or public calls
-- Utaite or internet-first creators preparing cover/MV releases
-- Independent musicians coordinating their own release assets and promotion
-- Small creator teams managing external dependencies without a manager
+- Vocaloid and DTM creators with many sketches, bounces, and dormant ideas
+- Utaite or MV creators coordinating audio, lyrics, illustration, video, credits, and publish timing
+- Independent musicians preparing releases, contests, or posting events
+- Small bands or units with shared folders and multiple songs/workstreams
 
 ## MVP Scope
 
-- Event/deadline project profile
-- Preset event types: Bokacolle/posting festival, DTM contest, cover/MV, distribution release
-- Kanban-first production board with `Decide`, `Next up`, `Doing`, `Waiting`, and `Ready`
-- Idea/demo cards with `Keep`, `Maybe`, `Parked`, and `Rejected`
-- Production lanes for composition, arrangement, vocal, Mix/Master, artwork/MV, upload, and promotion
-- Asset readiness for audio, lyrics, artwork, video, description/tags, credits, and SNS assets
-- External dependency state for illustrator, video editor, and Mix/Master
-- Rule checks for event requirements, posting windows, credits, and promotion plan
-- Automatic risk diagnosis derived from board state with `Critical`, `Warning`, and `Ready`
+- Mock folder recovery demo
+- Browser folder picker for local file trace analysis where supported
+- File type detection from names/extensions: DAW/session, demo, bounce, mix, master, lyrics, artwork, video, stems, references
+- Detected song/workstream groups
+- Estimated progress stage
+- Dormant idea signal from last-modified dates
+- Generated campaign board from recovered file traces
+- Music-specific cards for ideas, production lanes, assets, dependencies, and rules
+- Risk diagnosis with cause cards and next actions
 - `Next Focus` list with 1-3 prioritized actions
-- Sample Bokacolle-style project for fast validation
 - Browser-only persistence through `localStorage`
 
 ## Out of Scope
 
-- DAW plugin
-- Local file scanning
-- External API integrations
-- AI generation
+- Reading audio contents
+- Uploading files to a backend
+- Cloud Drive integration
+- DAW-specific parsing
+- AI audio analysis
+- Full background monitoring
 - Full Jira/Linear/Asana feature parity
 - Multi-user collaboration accounts
 - Billing, marketplace, or creator matching
-- Exhaustive support for every music event or distributor
 
 ## Run Locally
 
@@ -71,18 +70,12 @@ npm run test:e2e
 ## QA Checklist
 
 - [ ] App opens without runtime errors
-- [ ] Sample event project is visible immediately
-- [ ] Event type, deadline, platform, and goal can be edited
-- [ ] Kanban board is visible as the main work surface
-- [ ] Ideas/demos can be classified as Keep, Maybe, Parked, or Rejected
-- [ ] Active idea can be selected
-- [ ] Production lane status changes affect risk diagnosis
-- [ ] Asset readiness changes affect risk diagnosis
-- [ ] External dependency state changes affect risk diagnosis
-- [ ] Rule checks affect risk diagnosis
-- [ ] Next Focus shows concrete actions near the top of the experience
-- [ ] Findings explain why the issue matters
-- [ ] Findings include the signal that triggered them
+- [ ] Demo folder recovery creates detected song/workstream groups
+- [ ] Recovery insights show file count, active work, dormant ideas, and missing package signals
+- [ ] Recovered board is generated without manually creating cards
+- [ ] Event type, deadline, platform, and project name can be edited
+- [ ] Cards can be updated and diagnosis changes
+- [ ] Risk findings include cause cards where relevant
 - [ ] State persists after reload
 - [ ] Mobile width has no horizontal scrolling
 - [ ] `npm run lint` succeeds
@@ -91,12 +84,12 @@ npm run test:e2e
 
 ## Known Limitations
 
-- The MVP uses transparent local rules, not live platform or event data.
-- Users still update project state manually.
+- File recovery uses transparent local heuristics based on file names, extensions, and timestamps.
+- The app does not read audio contents.
+- Browser folder selection support varies by browser.
 - Rule profiles are simplified and should not be treated as official event guidance.
-- The app does not connect to DAWs, cloud storage, distributors, YouTube, NicoNico, or SNS.
 - The diagnosis is a validation aid, not legal, platform, or marketing advice.
 
 ## Storage and Privacy
 
-The app has no backend. Project state is stored only in the current browser through `localStorage`.
+The app has no backend. Project state and recovered file traces are stored only in the current browser through `localStorage`.

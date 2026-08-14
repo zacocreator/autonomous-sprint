@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
+import type { ChangeEvent } from 'react'
 import './App.css'
 
-type EventType = 'bokacolle' | 'dtm-contest' | 'cover-mv' | 'distribution'
+type EventType = 'festival' | 'contest' | 'cover-mv' | 'release' | 'live'
 type IdeaState = 'keep' | 'maybe' | 'parked' | 'rejected'
 type WorkStatus = 'not-started' | 'in-progress' | 'blocked' | 'done'
 type AssetStatus = 'missing' | 'draft' | 'ready'
@@ -9,6 +10,7 @@ type DependencyStatus = 'none' | 'planned' | 'waiting' | 'received'
 type Severity = 'critical' | 'warning' | 'ready'
 type Priority = 'Today' | 'This week' | 'Before deadline' | 'Monitor'
 type BoardColumnId = 'decide' | 'next' | 'doing' | 'waiting' | 'ready'
+type AssetKind = 'session' | 'demo' | 'bounce' | 'mix' | 'master' | 'lyrics' | 'artwork' | 'video' | 'stems' | 'reference'
 
 type Idea = {
   id: string
@@ -48,6 +50,28 @@ type ProjectState = {
   promoPlanReady: boolean
 }
 
+type FileTrace = {
+  path: string
+  name: string
+  modifiedDaysAgo: number
+}
+
+type SongGroup = {
+  id: string
+  title: string
+  files: FileTrace[]
+  kinds: Set<AssetKind>
+  lastTouchedDaysAgo: number
+  stage: string
+}
+
+type ScanReport = {
+  source: string
+  groups: SongGroup[]
+  insights: string[]
+  filesAnalyzed: number
+}
+
 type Finding = {
   id: string
   severity: Severity
@@ -56,6 +80,7 @@ type Finding = {
   signal: string
   action: string
   priority: Priority
+  sourceCard?: string
 }
 
 type BoardCard =
@@ -65,39 +90,68 @@ type BoardCard =
   | { id: string; column: BoardColumnId; kind: 'dependency'; title: string; meta: string; note: string; dependencyId: 'illustrator' | 'videoEditor' | 'mixMaster'; status: DependencyStatus }
   | { id: string; column: BoardColumnId; kind: 'rule'; title: string; meta: string; note: string; ruleId: 'eventRulesChecked' | 'postingWindowChecked' | 'creditsChecked' | 'promoPlanReady'; checked: boolean }
 
-const STORAGE_KEY = 'deadline-music-os-v2'
+const STORAGE_KEY = 'deadline-music-os-v3'
+const REPORT_STORAGE_KEY = 'deadline-music-os-scan-report-v1'
 const todayISO = toDateInputValue(new Date())
 
+const columns: { id: BoardColumnId; title: string; subtitle: string }[] = [
+  { id: 'decide', title: 'Ideas', subtitle: 'choose or park' },
+  { id: 'next', title: 'Next', subtitle: 'not started' },
+  { id: 'doing', title: 'Working', subtitle: 'in progress' },
+  { id: 'waiting', title: 'Waiting', subtitle: 'blocked or external' },
+  { id: 'ready', title: 'Ready', subtitle: 'done or checked' },
+]
+
+const baseLanes: WorkLane[] = [
+  { id: 'composition', label: 'Composition / topline', status: 'not-started' },
+  { id: 'arrangement', label: 'Arrangement', status: 'not-started' },
+  { id: 'vocal', label: 'Vocal / recording', status: 'not-started' },
+  { id: 'mix', label: 'Mix / master', status: 'not-started' },
+  { id: 'artwork', label: 'Artwork / MV', status: 'not-started' },
+  { id: 'upload', label: 'Upload / submission', status: 'not-started' },
+  { id: 'promotion', label: 'Promotion', status: 'not-started' },
+]
+
+const baseAssets: Asset[] = [
+  { id: 'audio', label: 'Final audio', status: 'missing' },
+  { id: 'lyrics', label: 'Lyrics', status: 'missing' },
+  { id: 'artwork', label: 'Artwork / thumbnail', status: 'missing' },
+  { id: 'video', label: 'MV / video', status: 'missing' },
+  { id: 'description', label: 'Description / tags', status: 'missing' },
+  { id: 'credits', label: 'Credits', status: 'missing' },
+  { id: 'sns', label: 'SNS assets', status: 'missing' },
+]
+
 const sampleProject: ProjectState = {
-  projectName: 'ボカコレ2026夏 Top100挑戦',
-  eventType: 'bokacolle',
+  projectName: 'Bokacolle summer campaign',
+  eventType: 'festival',
   deadline: offsetDate(18),
   platform: 'NicoNico / YouTube',
-  goal: '投稿祭に合わせて1曲を完成させ、初動で聴かれる状態にする',
+  goal: 'Finish one strong song and prepare the public posting package without last-minute asset gaps.',
   activeIdeaId: 'idea-1',
   ideas: [
-    { id: 'idea-1', title: '夜行バスのシンセロック', state: 'keep', note: '本命。サビ強めでMV化しやすい' },
-    { id: 'idea-2', title: '透明感ピアノDnB', state: 'maybe', note: '展開がまだ弱い' },
-    { id: 'idea-3', title: '8小節ギターリフ', state: 'parked', note: '別企画向き' },
-    { id: 'idea-4', title: '和風EDM断片', state: 'rejected', note: '締切に対して作業量が重い' },
+    { id: 'idea-1', title: 'Night Bus Synth Rock', state: 'keep', note: 'Main candidate. Strong chorus, likely MV-friendly.' },
+    { id: 'idea-2', title: 'Transparent Piano DnB', state: 'maybe', note: 'Nice texture, but the structure still feels weak.' },
+    { id: 'idea-3', title: '8-bar Guitar Motif', state: 'parked', note: 'Probably better for another project.' },
+    { id: 'idea-4', title: 'Japanese EDM Fragment', state: 'rejected', note: 'Too large for this deadline.' },
   ],
   lanes: [
-    { id: 'composition', label: '作曲 / メロ', status: 'done' },
-    { id: 'arrangement', label: '編曲', status: 'in-progress' },
-    { id: 'vocal', label: 'ボーカル / 調声', status: 'in-progress' },
-    { id: 'mix', label: 'Mix / Master', status: 'not-started' },
+    { id: 'composition', label: 'Composition / topline', status: 'done' },
+    { id: 'arrangement', label: 'Arrangement', status: 'in-progress' },
+    { id: 'vocal', label: 'Vocal / recording', status: 'in-progress' },
+    { id: 'mix', label: 'Mix / master', status: 'not-started' },
     { id: 'artwork', label: 'Artwork / MV', status: 'blocked' },
-    { id: 'upload', label: '投稿準備', status: 'not-started' },
-    { id: 'promotion', label: '告知 / 初動', status: 'not-started' },
+    { id: 'upload', label: 'Upload / submission', status: 'not-started' },
+    { id: 'promotion', label: 'Promotion', status: 'not-started' },
   ],
   assets: [
-    { id: 'audio', label: '完成音源', status: 'draft' },
-    { id: 'lyrics', label: '歌詞', status: 'ready' },
-    { id: 'artwork', label: 'サムネ / ジャケット', status: 'missing' },
-    { id: 'video', label: 'MV / 投稿動画', status: 'missing' },
-    { id: 'description', label: '概要欄 / タグ', status: 'draft' },
-    { id: 'credits', label: 'クレジット', status: 'draft' },
-    { id: 'sns', label: 'SNS告知素材', status: 'missing' },
+    { id: 'audio', label: 'Final audio', status: 'draft' },
+    { id: 'lyrics', label: 'Lyrics', status: 'ready' },
+    { id: 'artwork', label: 'Artwork / thumbnail', status: 'missing' },
+    { id: 'video', label: 'MV / video', status: 'missing' },
+    { id: 'description', label: 'Description / tags', status: 'draft' },
+    { id: 'credits', label: 'Credits', status: 'draft' },
+    { id: 'sns', label: 'SNS assets', status: 'missing' },
   ],
   illustrator: 'waiting',
   videoEditor: 'none',
@@ -114,14 +168,9 @@ const blankProject: ProjectState = {
   deadline: offsetDate(30),
   goal: '',
   activeIdeaId: 'idea-1',
-  ideas: sampleProject.ideas.map((idea, index) => ({
-    ...idea,
-    title: index === 0 ? '新しい曲案' : '',
-    note: '',
-    state: index === 0 ? 'keep' : 'parked',
-  })),
-  lanes: sampleProject.lanes.map((lane) => ({ ...lane, status: 'not-started' })),
-  assets: sampleProject.assets.map((asset) => ({ ...asset, status: 'missing' })),
+  ideas: [{ id: 'idea-1', title: 'New idea', state: 'keep', note: '' }],
+  lanes: baseLanes,
+  assets: baseAssets,
   illustrator: 'none',
   videoEditor: 'none',
   mixMaster: 'none',
@@ -131,12 +180,20 @@ const blankProject: ProjectState = {
   promoPlanReady: false,
 }
 
-const columns: { id: BoardColumnId; title: string; subtitle: string }[] = [
-  { id: 'decide', title: 'Decide', subtitle: '曲案と方針' },
-  { id: 'next', title: 'Next up', subtitle: '未着手' },
-  { id: 'doing', title: 'Doing', subtitle: '制作中' },
-  { id: 'waiting', title: 'Waiting', subtitle: '外部待ち/詰まり' },
-  { id: 'ready', title: 'Ready', subtitle: '完了/確認済み' },
+const mockFiles: FileTrace[] = [
+  { path: 'Music/Bokacolle/Night_Bus/Night_Bus.logicx', name: 'Night_Bus.logicx', modifiedDaysAgo: 2 },
+  { path: 'Music/Bokacolle/Night_Bus/Night_Bus_demo_v4.wav', name: 'Night_Bus_demo_v4.wav', modifiedDaysAgo: 2 },
+  { path: 'Music/Bokacolle/Night_Bus/Night_Bus_mix_test.mp3', name: 'Night_Bus_mix_test.mp3', modifiedDaysAgo: 4 },
+  { path: 'Music/Bokacolle/Night_Bus/lyrics.txt', name: 'lyrics.txt', modifiedDaysAgo: 6 },
+  { path: 'Music/Bokacolle/Night_Bus/ref_motion_graphic.mov', name: 'ref_motion_graphic.mov', modifiedDaysAgo: 9 },
+  { path: 'Music/Bokacolle/Piano_DnB/piano_dnb_idea.als', name: 'piano_dnb_idea.als', modifiedDaysAgo: 33 },
+  { path: 'Music/Bokacolle/Piano_DnB/piano_dnb_rough.wav', name: 'piano_dnb_rough.wav', modifiedDaysAgo: 33 },
+  { path: 'Music/Bokacolle/Guitar_Motif/guitar_riff_voice_memo.m4a', name: 'guitar_riff_voice_memo.m4a', modifiedDaysAgo: 94 },
+  { path: 'Music/Bokacolle/Guitar_Motif/chord_notes.md', name: 'chord_notes.md', modifiedDaysAgo: 94 },
+  { path: 'Music/Bokacolle/Japanese_EDM/edm_fragment.flp', name: 'edm_fragment.flp', modifiedDaysAgo: 140 },
+  { path: 'Music/Bokacolle/Japanese_EDM/export_001.wav', name: 'export_001.wav', modifiedDaysAgo: 138 },
+  { path: 'Music/Bokacolle/_campaign/artwork_brief.pdf', name: 'artwork_brief.pdf', modifiedDaysAgo: 12 },
+  { path: 'Music/Bokacolle/_campaign/posting_rules.txt', name: 'posting_rules.txt', modifiedDaysAgo: 3 },
 ]
 
 const severityRank: Record<Severity, number> = {
@@ -147,16 +204,19 @@ const severityRank: Record<Severity, number> = {
 
 function App() {
   const [project, setProject] = useState<ProjectState>(sampleProject)
+  const [scanReport, setScanReport] = useState<ScanReport | null>(null)
   const [isLoaded, setIsLoaded] = useState(false)
   const [storageWarning, setStorageWarning] = useState('')
   const [saveState, setSaveState] = useState<'Saved' | 'Saving...'>('Saved')
 
   useEffect(() => {
     try {
-      const raw = window.localStorage.getItem(STORAGE_KEY)
-      if (raw) setProject(parseProject(JSON.parse(raw)))
+      const rawProject = window.localStorage.getItem(STORAGE_KEY)
+      const rawReport = window.localStorage.getItem(REPORT_STORAGE_KEY)
+      if (rawProject) setProject(parseProject(JSON.parse(rawProject)))
+      if (rawReport) setScanReport(parseScanReport(JSON.parse(rawReport)))
     } catch {
-      setStorageWarning('保存済みの制作データを読み込めませんでした。このまま新しい状態で続けられます。')
+      setStorageWarning('Saved data could not be loaded. You can continue with a fresh project.')
     } finally {
       setIsLoaded(true)
     }
@@ -167,18 +227,24 @@ function App() {
     setSaveState('Saving...')
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(project))
+      if (scanReport) {
+        window.localStorage.setItem(REPORT_STORAGE_KEY, JSON.stringify(serializeScanReport(scanReport)))
+      } else {
+        window.localStorage.removeItem(REPORT_STORAGE_KEY)
+      }
       setStorageWarning('')
     } catch {
-      setStorageWarning('このブラウザでは変更を保存できません。検証中はタブを開いたままにしてください。')
+      setStorageWarning('This browser cannot save changes. Keep this tab open while validating.')
     }
     setSaveState('Saved')
-  }, [isLoaded, project])
+  }, [isLoaded, project, scanReport])
 
-  const findings = useMemo(() => diagnoseProject(project), [project])
+  const findings = useMemo(() => diagnoseProject(project, scanReport), [project, scanReport])
   const summary = useMemo(() => summarizeFindings(findings), [findings])
   const nextFocus = findings.filter((finding) => finding.severity !== 'ready').slice(0, 3)
   const boardCards = useMemo(() => buildBoard(project), [project])
   const days = daysUntil(project.deadline)
+  const directoryInputProps = { webkitdirectory: '' }
 
   function updateProject<Key extends keyof ProjectState>(key: Key, value: ProjectState[Key]) {
     setProject((current) => ({ ...current, [key]: value }))
@@ -213,36 +279,109 @@ function App() {
     setProject((current) => ({ ...current, [id]: checked }))
   }
 
+  function applyRecovery(report: ScanReport) {
+    setScanReport(report)
+    setProject(projectFromScan(report))
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  function recoverDemoFolder() {
+    applyRecovery(analyzeFiles(mockFiles, 'Demo folder'))
+  }
+
+  async function recoverSelectedFolder(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? [])
+    if (files.length === 0) return
+    const traces = files.map((file) => ({
+      path: file.webkitRelativePath || file.name,
+      name: file.name,
+      modifiedDaysAgo: Math.max(0, Math.round((Date.now() - file.lastModified) / 86_400_000)),
+    }))
+    applyRecovery(analyzeFiles(traces, 'Selected local folder'))
+    event.target.value = ''
+  }
+
   function loadSample() {
     setProject(sampleProject)
+    setScanReport(null)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   function resetProject() {
     setProject(blankProject)
+    setScanReport(null)
   }
 
   return (
     <main className="app-shell">
       <header className="topbar">
         <div>
-          <p className="eyebrow">Music production board</p>
+          <p className="eyebrow">Music project recovery</p>
           <h1>Music Deadline Studio</h1>
         </div>
         <div className="topbar-actions">
           <span className="save-state" aria-live="polite">{saveState}</span>
-          <button className="secondary" type="button" onClick={loadSample}>サンプル</button>
-          <button className="ghost" type="button" onClick={resetProject}>リセット</button>
+          <button className="secondary" type="button" onClick={loadSample}>Sample board</button>
+          <button className="ghost" type="button" onClick={resetProject}>Reset</button>
         </div>
       </header>
 
       {storageWarning && <p className="alert">{storageWarning}</p>}
 
-      <section className={`command-bar overall-${summary.overall}`} aria-label="プロジェクト概要とリスクサマリー">
+      <section className="recovery-panel" aria-label="Folder recovery">
+        <div>
+          <span className="panel-kicker">Passive capture prototype</span>
+          <h2>Start from a messy music folder, not a blank task board.</h2>
+          <p>
+            This demo infers song ideas, assets, progress, dormant sketches, and missing release materials from file names,
+            extensions, and timestamps. No audio content is read.
+          </p>
+        </div>
+        <div className="recovery-actions">
+          <button className="primary" type="button" onClick={recoverDemoFolder}>Recover demo folder</button>
+          <label className="file-picker">
+            Choose local folder
+            <input type="file" multiple {...directoryInputProps} onChange={recoverSelectedFolder} />
+          </label>
+        </div>
+      </section>
+
+      {scanReport && (
+        <section className="scan-report" aria-label="Recovered folder insights">
+          <div className="section-heading">
+            <div>
+              <span className="panel-kicker">Recovered state</span>
+              <h2>{scanReport.source}: {scanReport.groups.length} song/workstream groups</h2>
+            </div>
+            <p className="board-context">{scanReport.filesAnalyzed} files analyzed locally by file trace.</p>
+          </div>
+          <div className="insight-grid">
+            {scanReport.insights.map((insight) => <article key={insight}>{insight}</article>)}
+          </div>
+          <div className="song-table" aria-label="Detected song groups">
+            <div className="song-table-header">
+              <span>Detected group</span>
+              <span>Stage</span>
+              <span>Assets found</span>
+              <span>Last touched</span>
+            </div>
+            {scanReport.groups.map((group) => (
+              <div className="song-table-row" key={group.id}>
+                <strong>{group.title}</strong>
+                <span>{group.stage}</span>
+                <span>{Array.from(group.kinds).join(', ') || 'unknown'}</span>
+                <span>{group.lastTouchedDaysAgo} days ago</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className={`command-bar overall-${summary.overall}`} aria-label="Project summary and risk summary">
         <div className="project-fields">
           <label>
             Project
-            <input value={project.projectName} onChange={(event) => updateProject('projectName', event.target.value)} placeholder="ボカコレ2026夏 Top100挑戦" />
+            <input value={project.projectName} onChange={(event) => updateProject('projectName', event.target.value)} placeholder="Bokacolle summer campaign" />
           </label>
           <label>
             Deadline
@@ -251,10 +390,11 @@ function App() {
           <label>
             Type
             <select aria-label="Event type" value={project.eventType} onChange={(event) => updateProject('eventType', event.target.value as EventType)}>
-              <option value="bokacolle">ボカコレ / 投稿祭</option>
-              <option value="dtm-contest">DTMコンペ / 公募</option>
-              <option value="cover-mv">歌ってみた / MV公開</option>
-              <option value="distribution">配信リリース</option>
+              <option value="festival">Festival / posting event</option>
+              <option value="contest">DTM contest / client brief</option>
+              <option value="cover-mv">Cover / MV</option>
+              <option value="release">Distribution release</option>
+              <option value="live">Live / band campaign</option>
             </select>
           </label>
           <label>
@@ -271,13 +411,13 @@ function App() {
       </section>
 
       <section className="main-layout">
-        <section className="board-panel" aria-label="制作カンバン">
+        <section className="board-panel" aria-label="Production kanban">
           <div className="section-heading">
             <div>
-              <span className="panel-kicker">Kanban</span>
-              <h2>締切に向けた制作ボード</h2>
+              <span className="panel-kicker">Campaign board</span>
+              <h2>Recovered music workflow</h2>
             </div>
-            <p className="board-context">{project.goal || 'この締切で達成したいことをProject欄に整理してください。'}</p>
+            <p className="board-context">{project.goal || 'Move the recovered cards as the project becomes clearer.'}</p>
           </div>
           <div className="kanban-board">
             {columns.map((column) => {
@@ -312,11 +452,11 @@ function App() {
         </section>
 
         <aside className="right-rail">
-          <section className="panel sticky" aria-label="次にやること">
+          <section className="panel sticky" aria-label="Next focus">
             <div className="section-heading">
               <div>
                 <span className="panel-kicker">Next focus</span>
-                <h2>次に動かすカード</h2>
+                <h2>Cards to move next</h2>
               </div>
             </div>
             <ol className="focus-list">
@@ -325,26 +465,26 @@ function App() {
                   <span className={`severity-dot severity-${finding.severity}`} />
                   <div>
                     <strong>{finding.action}</strong>
-                    <small>{finding.title}</small>
+                    <small>{finding.sourceCard ? `Caused by: ${finding.sourceCard}` : finding.title}</small>
                   </div>
                 </li>
               )) : (
                 <li>
                   <span className="severity-dot severity-ready" />
                   <div>
-                    <strong>進捗更新を続ける</strong>
-                    <small>大きなリスクは見えていません</small>
+                    <strong>Keep updating the board</strong>
+                    <small>No major risk is visible from current traces.</small>
                   </div>
                 </li>
               )}
             </ol>
           </section>
 
-          <section className="panel" aria-label="リスク診断結果">
+          <section className="panel" aria-label="Risk diagnosis results">
             <div className="section-heading">
               <div>
                 <span className="panel-kicker">Risk diagnosis</span>
-                <h2>危ない理由</h2>
+                <h2>Why it may fail</h2>
               </div>
             </div>
             <div className="risk-list">
@@ -360,6 +500,12 @@ function App() {
                       <dt>Signal</dt>
                       <dd>{finding.signal}</dd>
                     </div>
+                    {finding.sourceCard && (
+                      <div>
+                        <dt>Cause card</dt>
+                        <dd>{finding.sourceCard}</dd>
+                      </div>
+                    )}
                     <div>
                       <dt>Next action</dt>
                       <dd>{finding.action}</dd>
@@ -410,7 +556,7 @@ function BoardCardView({
             <option value="parked">Parked</option>
             <option value="rejected">Rejected</option>
           </select>
-          <button className="mini-button" type="button" onClick={() => onSetActiveIdea(card.ideaId)}>本命</button>
+          <button className="mini-button" type="button" onClick={() => onSetActiveIdea(card.ideaId)}>Use</button>
         </div>
       )}
 
@@ -448,7 +594,7 @@ function BoardCardView({
             onChange={(event) => onRuleChange(card.ruleId, event.target.checked)}
             type="checkbox"
           />
-          確認済み
+          Checked
         </label>
       )}
     </article>
@@ -464,6 +610,98 @@ function Metric({ label, value }: { label: string; value: string }) {
   )
 }
 
+function analyzeFiles(files: FileTrace[], source: string): ScanReport {
+  const groups = groupFiles(files)
+  const insights = buildScanInsights(groups, files.length)
+  return { source, groups, insights, filesAnalyzed: files.length }
+}
+
+function groupFiles(files: FileTrace[]): SongGroup[] {
+  const map = new Map<string, FileTrace[]>()
+  for (const file of files) {
+    const groupName = inferGroupName(file.path, file.name)
+    map.set(groupName, [...(map.get(groupName) ?? []), file])
+  }
+
+  return Array.from(map.entries())
+    .filter(([title]) => !title.startsWith('_'))
+    .map(([title, groupFiles], index) => {
+      const kinds = new Set(groupFiles.map((file) => classifyFile(file.name)).filter(Boolean) as AssetKind[])
+      return {
+        id: `group-${index + 1}`,
+        title: titleFromSlug(title),
+        files: groupFiles,
+        kinds,
+        lastTouchedDaysAgo: Math.min(...groupFiles.map((file) => file.modifiedDaysAgo)),
+        stage: inferStage(kinds),
+      }
+    })
+    .sort((a, b) => a.lastTouchedDaysAgo - b.lastTouchedDaysAgo)
+}
+
+function buildScanInsights(groups: SongGroup[], fileCount: number) {
+  const insights = [
+    `${fileCount} files became ${groups.length} song/workstream groups without manual card creation.`,
+  ]
+  const active = groups.find((group) => group.lastTouchedDaysAgo <= 7)
+  const dormant = groups.find((group) => group.lastTouchedDaysAgo >= 60)
+  const nearRelease = groups.find((group) => group.kinds.has('mix') && !group.kinds.has('artwork') && !group.kinds.has('video'))
+
+  if (active) insights.push(`${active.title} looks active now: touched ${active.lastTouchedDaysAgo} days ago and estimated as ${active.stage}.`)
+  if (dormant) insights.push(`${dormant.title} looks dormant but recoverable: last touched ${dormant.lastTouchedDaysAgo} days ago.`)
+  if (nearRelease) insights.push(`${nearRelease.title} has mix progress but no artwork/video trace, so release packaging may be the next gap.`)
+  if (!nearRelease) insights.push('No group looks release-ready yet; the board should start with production and asset recovery.')
+
+  return insights.slice(0, 4)
+}
+
+function projectFromScan(report: ScanReport): ProjectState {
+  const ideas = report.groups.slice(0, 4).map<Idea>((group, index) => ({
+    id: `idea-${index + 1}`,
+    title: group.title,
+    state: index === 0 ? 'keep' : group.lastTouchedDaysAgo >= 60 ? 'parked' : 'maybe',
+    note: `${group.stage}. Found ${group.files.length} files: ${Array.from(group.kinds).join(', ') || 'unknown'}.`,
+  }))
+  const active = ideas[0]
+  const activeGroup = report.groups[0]
+  const activeKinds = activeGroup?.kinds ?? new Set<AssetKind>()
+
+  return {
+    projectName: `${report.source} recovery`,
+    eventType: 'festival',
+    deadline: offsetDate(21),
+    platform: 'NicoNico / YouTube / DSP',
+    goal: 'Recover existing sketches and turn the most promising work into a deadline-ready campaign board.',
+    activeIdeaId: active?.id ?? 'idea-1',
+    ideas: ideas.length > 0 ? ideas : blankProject.ideas,
+    lanes: [
+      { id: 'composition', label: 'Composition / topline', status: activeKinds.has('session') || activeKinds.has('demo') ? 'done' : 'not-started' },
+      { id: 'arrangement', label: 'Arrangement', status: activeKinds.has('bounce') || activeKinds.has('mix') || activeKinds.has('master') ? 'done' : 'in-progress' },
+      { id: 'vocal', label: 'Vocal / recording', status: activeKinds.has('lyrics') && activeKinds.has('demo') ? 'in-progress' : 'not-started' },
+      { id: 'mix', label: 'Mix / master', status: activeKinds.has('master') ? 'done' : activeKinds.has('mix') ? 'in-progress' : 'not-started' },
+      { id: 'artwork', label: 'Artwork / MV', status: activeKinds.has('artwork') || activeKinds.has('video') ? 'in-progress' : 'not-started' },
+      { id: 'upload', label: 'Upload / submission', status: 'not-started' },
+      { id: 'promotion', label: 'Promotion', status: 'not-started' },
+    ],
+    assets: [
+      { id: 'audio', label: 'Final audio', status: activeKinds.has('master') ? 'ready' : activeKinds.has('mix') || activeKinds.has('bounce') ? 'draft' : 'missing' },
+      { id: 'lyrics', label: 'Lyrics', status: activeKinds.has('lyrics') ? 'ready' : 'missing' },
+      { id: 'artwork', label: 'Artwork / thumbnail', status: activeKinds.has('artwork') ? 'draft' : 'missing' },
+      { id: 'video', label: 'MV / video', status: activeKinds.has('video') ? 'draft' : 'missing' },
+      { id: 'description', label: 'Description / tags', status: 'missing' },
+      { id: 'credits', label: 'Credits', status: 'missing' },
+      { id: 'sns', label: 'SNS assets', status: 'missing' },
+    ],
+    illustrator: activeKinds.has('artwork') ? 'planned' : 'none',
+    videoEditor: activeKinds.has('video') ? 'planned' : 'none',
+    mixMaster: activeKinds.has('mix') || activeKinds.has('master') ? 'received' : 'none',
+    eventRulesChecked: report.groups.some((group) => group.files.some((file) => /rule|guideline|brief/i.test(file.name))),
+    postingWindowChecked: false,
+    creditsChecked: false,
+    promoPlanReady: false,
+  }
+}
+
 function buildBoard(project: ProjectState): BoardCard[] {
   return [
     ...project.ideas.map<BoardCard>((idea) => ({
@@ -472,7 +710,7 @@ function buildBoard(project: ProjectState): BoardCard[] {
       kind: 'idea',
       title: idea.title || 'Untitled idea',
       meta: ideaStateLabel(idea.state),
-      note: idea.note || 'メモなし',
+      note: idea.note || 'No note',
       ideaId: idea.id,
       state: idea.state,
       active: project.activeIdeaId === idea.id,
@@ -504,9 +742,9 @@ function buildBoard(project: ProjectState): BoardCard[] {
 
 function dependencyCards(project: ProjectState): BoardCard[] {
   return [
-    dependencyCard('illustrator', 'Illustrator', project.illustrator, 'サムネ/ジャケット/MV素材の外部依存'),
-    dependencyCard('videoEditor', 'Video editor', project.videoEditor, 'MVや投稿動画の外部依存'),
-    dependencyCard('mixMaster', 'Mix / Master support', project.mixMaster, '音源確定前の外部依存'),
+    dependencyCard('illustrator', 'Illustrator', project.illustrator, 'External visual dependency.'),
+    dependencyCard('videoEditor', 'Video editor', project.videoEditor, 'External MV/video dependency.'),
+    dependencyCard('mixMaster', 'Mix / master support', project.mixMaster, 'External audio dependency.'),
   ]
 }
 
@@ -530,10 +768,10 @@ function dependencyCard(
 
 function ruleCards(project: ProjectState): BoardCard[] {
   return [
-    ruleCard('eventRulesChecked', '募集要項 / 投稿条件', project.eventRulesChecked, '失格、ランキング対象外、応募形式の確認'),
-    ruleCard('postingWindowChecked', '投稿期間 / 予約投稿', project.postingWindowChecked, '公開時刻、予約投稿、必要タグの確認'),
-    ruleCard('creditsChecked', 'クレジット / 使用条件', project.creditsChecked, '共同制作者、外注、権利表記の確認'),
-    ruleCard('promoPlanReady', '告知導線 / 初動投稿', project.promoPlanReady, '公開URL、SNS素材、投稿文の準備'),
+    ruleCard('eventRulesChecked', 'Event rules / brief', project.eventRulesChecked, 'Posting, contest, or client requirements.'),
+    ruleCard('postingWindowChecked', 'Posting window', project.postingWindowChecked, 'Public timing, upload settings, tags, and platform rules.'),
+    ruleCard('creditsChecked', 'Credits / usage', project.creditsChecked, 'Collaborator names, links, and usage terms.'),
+    ruleCard('promoPlanReady', 'Promotion path', project.promoPlanReady, 'SNS assets, captions, public link, and launch post.'),
   ]
 }
 
@@ -555,7 +793,7 @@ function ruleCard(
   }
 }
 
-function diagnoseProject(project: ProjectState) {
+function diagnoseProject(project: ProjectState, report: ScanReport | null) {
   const days = daysUntil(project.deadline)
   const findings: Finding[] = []
   const keepIdeas = project.ideas.filter((idea) => idea.state === 'keep' && idea.title.trim()).length
@@ -565,16 +803,31 @@ function diagnoseProject(project: ProjectState) {
   const getAsset = (id: string) => project.assets.find((asset) => asset.id === id)?.status ?? 'missing'
   const unfinishedCore = ['composition', 'arrangement', 'vocal', 'mix'].filter((id) => getLane(id) !== 'done')
   const missingLaunchAssets = project.assets.filter((asset) => ['artwork', 'video', 'description', 'credits', 'sns'].includes(asset.id) && asset.status === 'missing')
+  const dormantGroup = report?.groups.find((group) => group.lastTouchedDaysAgo >= 60)
+
+  if (report && dormantGroup) {
+    findings.push({
+      id: 'dormant-idea-found',
+      severity: 'warning',
+      title: 'Dormant idea was recovered from the folder',
+      why: 'Old sketches often disappear inside folders even when they could become useful for a new deadline.',
+      signal: `${dormantGroup.title} was last touched ${dormantGroup.lastTouchedDaysAgo} days ago.`,
+      action: `Review ${dormantGroup.title} and either park it intentionally or promote it to a candidate.`,
+      priority: 'This week',
+      sourceCard: dormantGroup.title,
+    })
+  }
 
   if (!project.projectName.trim()) {
     findings.push({
       id: 'project-name-missing',
       severity: 'critical',
-      title: 'プロジェクトの対象が曖昧です',
-      why: '締切、曲案、素材、外注待ちを結びつける中心がないと、日々の作業と公開準備がまた分断されます。',
-      signal: 'Project が未入力です。',
-      action: 'この締切で何を出すかを1行で名前にしてください。',
+      title: 'Project target is unclear',
+      why: 'The board needs a campaign or deadline target to connect songs, assets, dependencies, and readiness.',
+      signal: 'Project is empty.',
+      action: 'Name the campaign or deadline this board is preparing for.',
       priority: 'Today',
+      sourceCard: 'Project',
     })
   }
 
@@ -582,11 +835,12 @@ function diagnoseProject(project: ProjectState) {
     findings.push({
       id: 'deadline-invalid',
       severity: 'critical',
-      title: '締切が診断できません',
-      why: '締切から逆算できないと、外注依頼、投稿予約、Mix締切、告知素材の危険度を判断できません。',
-      signal: days < 0 ? '締切日が過去です。' : '締切日が未入力です。',
-      action: '実際に間に合わせたい公開日または応募締切を入れてください。',
+      title: 'Deadline cannot be diagnosed',
+      why: 'Without a date, the app cannot judge hidden deadlines for mix, artwork, upload, or promotion.',
+      signal: days < 0 ? 'Deadline is in the past.' : 'Deadline is empty.',
+      action: 'Set the real release, submission, live, or posting deadline.',
       priority: 'Today',
+      sourceCard: 'Deadline',
     })
   }
 
@@ -594,31 +848,34 @@ function diagnoseProject(project: ProjectState) {
     findings.push({
       id: 'no-kept-idea',
       severity: 'critical',
-      title: '採用候補が決まっていません',
-      why: '複数モチーフを残すのは自然ですが、締切が近い状態でKeepがないと制作レーン全体が止まります。',
-      signal: 'Keep 状態の曲案がありません。',
-      action: '今の締切に出す候補を1つだけ Keep にしてください。',
+      title: 'No active candidate is selected',
+      why: 'Recovering many ideas is useful, but a deadline board needs one current candidate to move production forward.',
+      signal: 'No idea is marked Keep.',
+      action: 'Pick one recovered idea as Keep, and park the rest.',
       priority: 'Today',
+      sourceCard: 'Ideas',
     })
   } else if (keepIdeas > 1 && days <= 21) {
     findings.push({
       id: 'too-many-kept-ideas',
       severity: 'warning',
-      title: '採用候補がまだ多すぎます',
-      why: 'コンペや投稿祭では曲案を残せることが重要ですが、締切3週間前以降は複数Keepが制作時間を削ります。',
-      signal: `${keepIdeas}件の曲案が Keep です。`,
-      action: '本命以外を Maybe または Parked に落として、制作レーンを1曲に集中してください。',
+      title: 'Too many candidates are still active',
+      why: 'Multiple active candidates can keep a creator exploring while downstream assets remain blocked.',
+      signal: `${keepIdeas} ideas are marked Keep.`,
+      action: 'Keep only the main candidate for this deadline.',
       priority: 'This week',
+      sourceCard: 'Ideas',
     })
   } else if (activeIdea?.state === 'keep') {
     findings.push({
       id: 'active-idea-ready',
       severity: 'ready',
-      title: '本命の曲案が見えています',
-      why: '作業対象が明確なため、制作進捗と素材準備を同じ締切に結びつけられます。',
+      title: 'A main candidate is visible',
+      why: 'The board can connect production and asset work to a concrete song/workstream.',
       signal: `Active idea: ${activeIdea.title || 'Untitled idea'}`,
-      action: 'この曲案を基準に制作レーンと素材状態を更新してください。',
+      action: 'Use this candidate as the anchor for production and packaging.',
       priority: 'Monitor',
+      sourceCard: activeIdea.title,
     })
   }
 
@@ -626,11 +883,12 @@ function diagnoseProject(project: ProjectState) {
     findings.push({
       id: 'maybe-ideas-close-deadline',
       severity: 'warning',
-      title: '迷っている曲案が締切直前まで残っています',
-      why: 'Maybeが残ること自体は悪くありませんが、直前期は判断保留がMix、動画、投稿準備の遅れにつながります。',
-      signal: `${maybeIdeas}件の Maybe 案があります。`,
-      action: 'Maybe案をParkedに退避し、今回の締切では本命だけを進めてください。',
+      title: 'Undecided ideas remain close to deadline',
+      why: 'A Maybe idea can keep the project open-ended when mix, video, and upload work need certainty.',
+      signal: `${maybeIdeas} ideas are still Maybe.`,
+      action: 'Park Maybe ideas and focus on one candidate for this deadline.',
       priority: 'Today',
+      sourceCard: 'Ideas',
     })
   }
 
@@ -638,21 +896,23 @@ function diagnoseProject(project: ProjectState) {
     findings.push({
       id: 'core-production-behind',
       severity: 'critical',
-      title: '制作本体が締切に対して遅れています',
-      why: '音源が固まらないままMV、概要欄、告知素材を進めると、後戻りが連鎖します。',
-      signal: `未完了の中核レーン: ${unfinishedCore.map((id) => laneLabel(project, id)).join(' / ')}`,
-      action: '今日中に「完成音源を出す日」を決め、Mix/Masterより後ろの作業を一度止めてください。',
+      title: 'Core production is behind the deadline',
+      why: 'When audio is not locked, artwork, video, upload, and promotion can all inherit the delay.',
+      signal: `Unfinished core lanes: ${unfinishedCore.map((id) => laneLabel(project, id)).join(' / ')}`,
+      action: 'Create a hard date for the export candidate before adding more launch polish.',
       priority: 'Today',
+      sourceCard: 'Production lanes',
     })
   } else if (days <= 21 && getLane('mix') === 'not-started') {
     findings.push({
       id: 'mix-not-started',
       severity: 'warning',
-      title: 'Mix / Master の着手が遅れています',
-      why: '締切型制作ではラフ完成が遅れるほど、投稿素材や外注チェックに使える時間がなくなります。',
-      signal: 'Mix / Master が Not started です。',
-      action: '仮Mixではなく、提出候補の音源を作る日を今週内に置いてください。',
+      title: 'Mix / master has not started',
+      why: 'The scan may find demos, but release readiness depends on a candidate mix or master.',
+      signal: 'Mix / master is Not started.',
+      action: 'Move Mix / master to Working and create the first export candidate.',
       priority: 'This week',
+      sourceCard: 'Mix / master',
     })
   }
 
@@ -660,23 +920,25 @@ function diagnoseProject(project: ProjectState) {
     findings.push({
       id: 'artwork-external-wait',
       severity: days <= 28 ? 'critical' : 'warning',
-      title: 'Artwork / MV が外部待ちで締切リスクになっています',
-      why: '投稿祭やMV公開では、公開締切より前にイラスト・動画側の実質締切が発生します。',
+      title: 'Artwork / MV is a deadline dependency',
+      why: 'Visual assets often create a hidden deadline before the public posting or release date.',
       signal: `Artwork lane: ${statusLabel(getLane('artwork'))}, Illustrator: ${dependencyLabel(project.illustrator)}`,
-      action: '依頼先に渡す音源、歌詞、参考、締切、使用範囲を1つのHandoffとして確定してください。',
+      action: 'Confirm the handoff package: audio, lyrics, references, deadline, credits, and usage.',
       priority: days <= 28 ? 'Today' : 'This week',
+      sourceCard: 'Artwork / MV',
     })
   }
 
-  if ((project.eventType === 'bokacolle' || project.eventType === 'cover-mv') && getAsset('video') === 'missing' && days <= 21) {
+  if ((project.eventType === 'festival' || project.eventType === 'cover-mv') && getAsset('video') === 'missing' && days <= 21) {
     findings.push({
       id: 'video-missing',
       severity: 'critical',
-      title: '投稿動画がまだありません',
-      why: 'NicoNico/YouTube中心の公開では、音源完成だけでは公開できません。動画、サムネ、概要欄が公開面の本体です。',
-      signal: 'MV / 投稿動画 が Missing です。',
-      action: '静止画動画で出すのか、MVを依頼するのかを今日決めてください。',
+      title: 'No video asset was found',
+      why: 'For NicoNico/YouTube-centered work, final audio is not enough. The public package needs video or a minimum visual upload.',
+      signal: 'MV / video is Missing.',
+      action: 'Decide whether this project needs a full MV or a minimum static-video path.',
       priority: 'Today',
+      sourceCard: 'MV / video',
     })
   }
 
@@ -684,21 +946,23 @@ function diagnoseProject(project: ProjectState) {
     findings.push({
       id: 'launch-assets-missing',
       severity: 'critical',
-      title: '公開素材がまとめて不足しています',
-      why: '公開直前に素材不足へ気づくと、制作ではなく探す・書く・整える作業に時間を奪われます。',
+      title: 'Multiple launch assets are missing',
+      why: 'Missing launch assets tend to appear late and turn creative time into searching, writing, and formatting work.',
       signal: `Missing: ${missingLaunchAssets.map((asset) => asset.label).join(' / ')}`,
-      action: '音源以外の不足素材を3つまでに絞り、今日中に最低限版を作ってください。',
+      action: 'Create minimum versions of the missing public assets before more production polishing.',
       priority: 'Today',
+      sourceCard: 'Launch assets',
     })
   } else if (missingLaunchAssets.length > 0) {
     findings.push({
       id: 'launch-assets-partial',
       severity: 'warning',
-      title: '公開素材に抜けがあります',
-      why: '素材の抜けは公開準備の最後に発見されやすく、投稿予約や告知導線を止めます。',
+      title: 'Some launch assets are missing',
+      why: 'Recovered audio files are useful, but release/event readiness also depends on public-facing materials.',
       signal: `Missing: ${missingLaunchAssets.map((asset) => asset.label).join(' / ')}`,
-      action: '不足素材をReadyにする順番を、投稿画面に必要なものから並べてください。',
+      action: 'Finish missing assets in the order required by the upload or event workflow.',
       priority: days <= 21 ? 'This week' : 'Before deadline',
+      sourceCard: 'Launch assets',
     })
   }
 
@@ -706,45 +970,23 @@ function diagnoseProject(project: ProjectState) {
     findings.push({
       id: 'rules-not-checked',
       severity: days <= 21 ? 'critical' : 'warning',
-      title: 'イベント/応募ルールが未確認です',
-      why: '投稿期間、公開済み可否、タグ、ランキング条件、応募形式は制作内容や公開方法そのものに影響します。',
-      signal: '募集要項 / 投稿条件が未チェックです。',
-      action: '制作を進める前に、今回のイベントで失格やランキング対象外になりうる条件だけ確認してください。',
+      title: 'Event rules or brief are not checked',
+      why: 'Posting windows, file formats, tags, rankings, or client requirements can invalidate otherwise good work.',
+      signal: 'Event rules / brief is unchecked.',
+      action: 'Check the rules that can make this work ineligible or late.',
       priority: days <= 21 ? 'Today' : 'This week',
+      sourceCard: 'Event rules / brief',
     })
   } else {
     findings.push({
       id: 'rules-ready',
       severity: 'ready',
-      title: 'イベントルールは確認済みです',
-      why: '投稿条件が確認済みなら、制作と公開準備の判断を締切に結びつけやすくなります。',
-      signal: '募集要項 / 投稿条件 がチェック済みです。',
-      action: 'ルール変更や追記だけ締切前に再確認してください。',
+      title: 'Rules or brief are checked',
+      why: 'The board can now judge production work against a known campaign context.',
+      signal: 'Event rules / brief is checked.',
+      action: 'Recheck only if the event or client brief changes.',
       priority: 'Monitor',
-    })
-  }
-
-  if (!project.postingWindowChecked && days <= 10) {
-    findings.push({
-      id: 'posting-window-not-checked',
-      severity: 'critical',
-      title: '投稿期間と公開設定が未確認です',
-      why: '投稿祭では予約投稿、公開タイミング、期間外公開がランキングや参加条件に影響することがあります。',
-      signal: '投稿期間 / 予約投稿 / 公開設定が未チェックです。',
-      action: '予約投稿の可否、公開開始時刻、必要タグを確認し、投稿画面を先に作ってください。',
-      priority: 'Today',
-    })
-  }
-
-  if (!project.creditsChecked && (getAsset('credits') !== 'ready' || project.illustrator !== 'none' || project.videoEditor !== 'none')) {
-    findings.push({
-      id: 'credits-unresolved',
-      severity: 'warning',
-      title: 'クレジットと使用条件が曖昧です',
-      why: '歌ってみた、MV、外注、共同制作では、公開後より公開前に表記と使用範囲を揃える方が手戻りが少なくなります。',
-      signal: 'クレジット / 権利表記 が未チェックです。',
-      action: '参加者名、リンク、使用範囲、概要欄表記を1か所にまとめて確認してください。',
-      priority: days <= 14 ? 'Today' : 'This week',
+      sourceCard: 'Event rules / brief',
     })
   }
 
@@ -752,35 +994,12 @@ function diagnoseProject(project: ProjectState) {
     findings.push({
       id: 'promo-not-ready',
       severity: 'warning',
-      title: '告知導線が制作進捗から分離しています',
-      why: 'リリース単体チェックでは見落としやすいですが、SNS素材や投稿文は公開直前にまとめて発生しがちです。',
-      signal: '告知導線と初動投稿 が未チェックです。',
-      action: '公開URLがなくても作れる告知文、短尺、固定投稿だけ先に用意してください。',
+      title: 'Promotion path is not ready',
+      why: 'Creators often finish audio first, then lose release momentum because public posts and links are late.',
+      signal: 'Promotion path is unchecked.',
+      action: 'Prepare one launch post, one short clip/image, and one stable public link.',
       priority: 'This week',
-    })
-  }
-
-  if (getAsset('audio') === 'ready' && getAsset('description') === 'ready' && project.postingWindowChecked) {
-    findings.push({
-      id: 'posting-package-ready',
-      severity: 'ready',
-      title: '投稿パッケージの核は揃っています',
-      why: '完成音源、概要欄、公開設定が揃うと、公開直前の不確実性が大きく下がります。',
-      signal: '完成音源 / 概要欄 / 投稿設定 がReadyです。',
-      action: 'サムネ、クレジット、告知素材の最終確認に移ってください。',
-      priority: 'Monitor',
-    })
-  }
-
-  if (findings.length === 0) {
-    findings.push({
-      id: 'no-risk-visible',
-      severity: 'ready',
-      title: '大きなリスクは見えていません',
-      why: '現在の入力では、締切、制作、素材、ルールの間に重大な矛盾はありません。',
-      signal: 'Critical / Warning の条件に該当しません。',
-      action: '進捗が変わったらこの画面を更新し、締切1週間前に再確認してください。',
-      priority: 'Monitor',
+      sourceCard: 'Promotion path',
     })
   }
 
@@ -793,12 +1012,41 @@ function summarizeFindings(findings: Finding[]) {
   const ready = findings.filter((finding) => finding.severity === 'ready').length
   const overall: Severity = critical > 0 ? 'critical' : warning > 0 ? 'warning' : 'ready'
 
-  return {
-    critical,
-    warning,
-    ready,
-    overall,
-  }
+  return { critical, warning, ready, overall }
+}
+
+function inferGroupName(path: string, name: string) {
+  const parts = path.split(/[\\/]/).filter(Boolean)
+  if (parts.length >= 2) return parts[parts.length - 2]
+  return name.replace(/\.[^.]+$/, '').replace(/(_|-)?(demo|rough|mix|master|bounce|lyrics|ref|reference|stems?).*$/i, '')
+}
+
+function classifyFile(name: string): AssetKind | null {
+  const lower = name.toLowerCase()
+  if (/\.(logicx|als|flp|cpr|band|ptx|rpp)$/.test(lower)) return 'session'
+  if (/stem|stems/.test(lower)) return 'stems'
+  if (/master/.test(lower)) return 'master'
+  if (/mix/.test(lower)) return 'mix'
+  if (/bounce|export|2mix/.test(lower)) return 'bounce'
+  if (/demo|rough|idea|memo/.test(lower) || /\.(wav|mp3|m4a|aiff|flac)$/.test(lower)) return 'demo'
+  if (/lyric|lyrics|歌詞/.test(lower) || /\.(txt|md|docx)$/.test(lower)) return 'lyrics'
+  if (/art|jacket|cover|thumb|thumbnail|illust/.test(lower) || /\.(png|jpg|jpeg|psd|ai)$/.test(lower)) return 'artwork'
+  if (/mv|video|movie/.test(lower) || /\.(mov|mp4|avi|prproj)$/.test(lower)) return 'video'
+  if (/ref|reference|brief|rule|guideline/.test(lower) || /\.(pdf)$/.test(lower)) return 'reference'
+  return null
+}
+
+function inferStage(kinds: Set<AssetKind>) {
+  if (kinds.has('master')) return 'master/package prep'
+  if (kinds.has('mix')) return 'mix candidate'
+  if (kinds.has('bounce') || kinds.has('stems')) return 'arrangement/export'
+  if (kinds.has('demo') && kinds.has('session')) return 'demo in production'
+  if (kinds.has('demo') || kinds.has('session')) return 'sketch/demo'
+  return 'unknown'
+}
+
+function titleFromSlug(value: string) {
+  return value.replace(/[_-]+/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
 }
 
 function parseProject(value: unknown): ProjectState {
@@ -809,6 +1057,24 @@ function parseProject(value: unknown): ProjectState {
     ideas: mergeById(sampleProject.ideas, record.ideas),
     lanes: mergeById(sampleProject.lanes, record.lanes),
     assets: mergeById(sampleProject.assets, record.assets),
+  }
+}
+
+function parseScanReport(value: unknown): ScanReport | null {
+  const record = value as { source?: string; filesAnalyzed?: number; groups?: Array<Omit<SongGroup, 'kinds'> & { kinds: AssetKind[] }>; insights?: string[] }
+  if (!record.source || !record.groups) return null
+  return {
+    source: record.source,
+    filesAnalyzed: record.filesAnalyzed ?? 0,
+    insights: record.insights ?? [],
+    groups: record.groups.map((group) => ({ ...group, kinds: new Set(group.kinds) })),
+  }
+}
+
+function serializeScanReport(report: ScanReport) {
+  return {
+    ...report,
+    groups: report.groups.map((group) => ({ ...group, kinds: Array.from(group.kinds) })),
   }
 }
 
@@ -829,26 +1095,26 @@ function kindLabel(kind: BoardCard['kind']) {
 
 function laneNote(id: string) {
   return {
-    composition: '曲の芯を固める',
-    arrangement: '完成形の密度に近づける',
-    vocal: '歌/調声/録音を確定する',
-    mix: '提出候補の音源にする',
-    artwork: '公開面の見た目を揃える',
-    upload: '投稿画面と公開設定を作る',
-    promotion: '初動で出す素材と文面を揃える',
-  }[id] ?? '制作作業'
+    composition: 'Core musical idea or topline.',
+    arrangement: 'Structure and density toward a finished track.',
+    vocal: 'Voice, recording, or vocal editing.',
+    mix: 'Candidate mix or master export.',
+    artwork: 'Public visual surface.',
+    upload: 'Submission or platform upload.',
+    promotion: 'Launch copy, clips, and public links.',
+  }[id] ?? 'Production work.'
 }
 
 function assetNote(id: string) {
   return {
-    audio: '投稿や配信に使う最終音源',
-    lyrics: '動画、概要欄、クレジットの元情報',
-    artwork: 'サムネ、ジャケット、告知画像',
-    video: 'NicoNico/YouTubeで公開する本体',
-    description: '概要欄、タグ、リンク、説明文',
-    credits: '共同制作者と表記',
-    sns: '公開前後の告知素材',
-  }[id] ?? '公開素材'
+    audio: 'Final or candidate audio for release/submission.',
+    lyrics: 'Lyrics for video, captions, and credits.',
+    artwork: 'Cover, thumbnail, or announcement image.',
+    video: 'NicoNico/YouTube/MV public asset.',
+    description: 'Description, tags, links, and post text.',
+    credits: 'Collaborators and usage terms.',
+    sns: 'Launch posts, clips, and short assets.',
+  }[id] ?? 'Public asset.'
 }
 
 function laneLabel(project: ProjectState, id: string) {

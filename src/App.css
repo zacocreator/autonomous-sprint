@@ -55,6 +55,8 @@
 }
 
 .command-bar,
+.recovery-panel,
+.scan-report,
 .board-panel,
 .panel,
 .board-card,
@@ -63,6 +65,116 @@
   border-radius: 8px;
   background: #ffffff;
   box-shadow: 0 8px 24px rgba(22, 36, 46, 0.06);
+}
+
+.recovery-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 0.34fr);
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 16px;
+  padding: 18px;
+}
+
+.recovery-panel h2,
+.scan-report h2 {
+  margin: 0 0 8px;
+  color: #14212b;
+  font-size: clamp(1.25rem, 3vw, 1.7rem);
+}
+
+.recovery-panel p {
+  max-width: 760px;
+  margin: 0;
+  color: #52616a;
+  line-height: 1.5;
+}
+
+.recovery-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.primary {
+  background: #174ea6;
+  color: #ffffff;
+}
+
+.file-picker {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 10px;
+  border: 1px dashed #aebdca;
+  border-radius: 8px;
+  background: #f7f9fb;
+  text-align: center;
+}
+
+.file-picker input {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  font-size: 0.78rem;
+}
+
+.scan-report {
+  margin-bottom: 16px;
+  padding: 16px;
+}
+
+.insight-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.insight-grid article {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #e1e7ec;
+  border-radius: 8px;
+  background: #fbfcfd;
+  color: #33424f;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.song-table {
+  display: grid;
+  overflow-x: auto;
+  border: 1px solid #e1e7ec;
+  border-radius: 8px;
+}
+
+.song-table-header,
+.song-table-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(140px, 0.5fr) minmax(240px, 1fr) minmax(110px, 0.4fr);
+  gap: 12px;
+  min-width: 760px;
+  padding: 10px 12px;
+}
+
+.song-table-header {
+  background: #f1f5f9;
+  color: #52616a;
+  font-size: 0.76rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.song-table-row {
+  border-top: 1px solid #e1e7ec;
+  color: #33424f;
+  font-size: 0.88rem;
+}
+
+.song-table-row strong,
+.song-table-row span {
+  overflow-wrap: anywhere;
 }
 
 .command-bar {
@@ -521,6 +633,7 @@ dd {
 
 @media (max-width: 1120px) {
   .command-bar,
+  .recovery-panel,
   .main-layout {
     grid-template-columns: 1fr;
   }
@@ -561,9 +674,15 @@ dd {
   }
 
   .command-bar,
+  .recovery-panel,
+  .scan-report,
   .board-panel,
   .panel {
     padding: 12px;
+  }
+
+  .insight-grid {
+    grid-template-columns: 1fr;
   }
 
   .kanban-board {
