@@ -1,44 +1,49 @@
-# Release Readiness Validator
+# Music Deadline Studio
 
-Release Readiness Validator is a local-first MVP for independent music creators preparing an upcoming release. It is designed for validation, not production operations.
+Music Deadline Studio is a local-first validation MVP for independent music creators working toward a deadline-driven release, contest, posting festival, cover video, MV, or distribution launch.
 
-The core experience is release QA: the user enters the current release state, then the app diagnoses what is risky, why it matters, and what to do next.
+The product is not a generic task manager and not a standalone release checklist. The core experience is: update the current production state, then see what is risky, why it matters, and what to focus on next.
 
 ## Product Goal
 
-Help an independent music creator understand whether an upcoming release is ready enough to proceed, with prioritized risks instead of a generic checklist.
+Help music creators manage event/deadline-centered production work and naturally derive release readiness from progress, assets, external dependencies, and platform or event rules.
 
 ## Core Hypothesis
 
-Music creators will value a product that understands release-specific dependencies, deadlines, external platform rules, and asset readiness enough to flag what is dangerous before launch.
+Music creators will value a product that connects daily production work with deadline-specific readiness, because generic tools do not understand music-specific dependencies such as demos, parked ideas, Mix/Master, artwork, MV, credits, posting windows, and promotion assets.
 
 ## Target User
 
-- Independent musicians releasing without a manager
-- DTM and bedroom producers
-- Vocaloid producers and internet-first creators
-- Small bands or units coordinating their own release assets
+- Vocaloid producers preparing for posting festivals such as Bokacolle
+- DTM creators entering contests or public calls
+- Utaite or internet-first creators preparing cover/MV releases
+- Independent musicians coordinating their own release assets and promotion
+- Small creator teams managing external dependencies without a manager
 
 ## MVP Scope
 
-- Enter one release's current state
-- Diagnose readiness with `Critical`, `Warning`, and `Ready` findings
-- Explain why each finding matters
-- Recommend the next action for each risk
-- Show an overall readiness summary and top priority action
-- Load a sample risky release for fast validation
-- Persist the current release state in browser `localStorage`
+- Event/deadline project profile
+- Preset event types: Bokacolle/posting festival, DTM contest, cover/MV, distribution release
+- Idea/demo board with `Keep`, `Maybe`, `Parked`, and `Rejected`
+- Production lanes for composition, arrangement, vocal, Mix/Master, artwork/MV, upload, and promotion
+- Asset readiness for audio, lyrics, artwork, video, description/tags, credits, and SNS assets
+- External dependency state for illustrator, video editor, and Mix/Master
+- Rule checks for event requirements, posting windows, credits, and promotion plan
+- Automatic risk diagnosis with `Critical`, `Warning`, and `Ready`
+- `Next Focus` list with 1-3 prioritized actions
+- Sample Bokacolle-style project for fast validation
+- Browser-only persistence through `localStorage`
 
 ## Out of Scope
 
-- General task management
-- Custom checklist building
+- DAW plugin
+- Local file scanning
 - External API integrations
-- Spotify, distributor, YouTube, or NicoNico automation
-- Team collaboration
-- AI-generated copy
-- Promotion service trust scoring
-- Rights or royalty management
+- AI generation
+- Full Jira/Linear/Asana feature parity
+- Multi-user collaboration accounts
+- Billing, marketplace, or creator matching
+- Exhaustive support for every music event or distributor
 
 ## Run Locally
 
@@ -65,29 +70,31 @@ npm run test:e2e
 ## QA Checklist
 
 - [ ] App opens without runtime errors
-- [ ] Sample diagnosis loads a risky release
-- [ ] Release title, artist, date, platform focus, distributor status, pitch status, link status, asset status, and notes can be edited
-- [ ] Diagnosis can be run from the form
-- [ ] Overall readiness shows `Critical`, `Warning`, or `Ready`
-- [ ] Critical findings appear before warnings and ready items
-- [ ] Each finding explains why it matters
-- [ ] Each finding includes a concrete next action
-- [ ] Missing release title or artist is treated as a risk
-- [ ] Near release date with unsubmitted Spotify pitch is Critical
-- [ ] Updating inputs and re-running diagnosis changes the output
-- [ ] Current release state persists after reload
+- [ ] Sample event project is visible immediately
+- [ ] Event type, deadline, platform, and goal can be edited
+- [ ] Ideas/demos can be classified as Keep, Maybe, Parked, or Rejected
+- [ ] Active idea can be selected
+- [ ] Production lane status changes affect risk diagnosis
+- [ ] Asset readiness changes affect risk diagnosis
+- [ ] External dependency state changes affect risk diagnosis
+- [ ] Rule checks affect risk diagnosis
+- [ ] Next Focus shows concrete actions near the top of the experience
+- [ ] Findings explain why the issue matters
+- [ ] Findings include the signal that triggered them
+- [ ] State persists after reload
 - [ ] Mobile width has no horizontal scrolling
+- [ ] `npm run lint` succeeds
 - [ ] `npm run build` succeeds
 - [ ] `npm run test:e2e` succeeds
 
 ## Known Limitations
 
-- The MVP uses transparent local rules, not live platform data.
-- The user must manually enter release state.
-- Japan-first workflows such as YouTube, NicoNico, and Bokacolle are represented only at a basic validation level.
-- The app does not verify actual distributor delivery, Spotify for Artists visibility, or public links.
+- The MVP uses transparent local rules, not live platform or event data.
+- Users still update project state manually.
+- Rule profiles are simplified and should not be treated as official event guidance.
+- The app does not connect to DAWs, cloud storage, distributors, YouTube, NicoNico, or SNS.
 - The diagnosis is a validation aid, not legal, platform, or marketing advice.
 
 ## Storage and Privacy
 
-The app has no backend. Release state is stored only in the current browser through `localStorage`.
+The app has no backend. Project state is stored only in the current browser through `localStorage`.
