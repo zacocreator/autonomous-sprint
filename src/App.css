@@ -1,15 +1,16 @@
 .app-shell {
-  width: min(1240px, calc(100% - 32px));
+  width: min(1440px, calc(100% - 28px));
   margin: 0 auto;
-  padding: 28px 0 44px;
+  padding: 22px 0 40px;
 }
 
 .topbar,
 .topbar-actions,
 .section-heading,
 .risk-topline,
-.inline-controls,
-.check-control {
+.card-topline,
+.card-controls,
+.card-checkbox {
   display: flex;
   align-items: center;
 }
@@ -17,7 +18,7 @@
 .topbar {
   justify-content: space-between;
   gap: 18px;
-  margin-bottom: 18px;
+  margin-bottom: 14px;
 }
 
 .topbar-actions {
@@ -31,7 +32,7 @@
   display: block;
   margin: 0 0 5px;
   color: #62717a;
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   font-weight: 900;
   letter-spacing: 0;
   text-transform: uppercase;
@@ -45,7 +46,7 @@
 }
 
 .alert {
-  margin: 0 0 16px;
+  margin: 0 0 14px;
   padding: 12px 14px;
   border: 1px solid #d4a72c;
   border-radius: 8px;
@@ -53,38 +54,25 @@
   color: #624500;
 }
 
-.diagnosis-hero,
+.command-bar,
+.board-panel,
 .panel,
-.results-panel,
+.board-card,
 .risk-card {
   border: 1px solid #d8e0e6;
   border-radius: 8px;
   background: #ffffff;
-  box-shadow: 0 10px 28px rgba(22, 36, 46, 0.07);
+  box-shadow: 0 8px 24px rgba(22, 36, 46, 0.06);
 }
 
-.diagnosis-hero {
+.command-bar {
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(260px, 0.75fr);
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 0.5fr);
   gap: 16px;
-  align-items: stretch;
+  align-items: end;
   margin-bottom: 16px;
-  padding: 22px;
+  padding: 16px;
   border-left: 6px solid #8b97a3;
-}
-
-.diagnosis-hero h2 {
-  margin: 0 0 8px;
-  color: #101820;
-  font-size: clamp(1.8rem, 4vw, 3rem);
-  line-height: 1;
-}
-
-.diagnosis-hero p {
-  max-width: 720px;
-  margin: 0;
-  color: #40505b;
-  line-height: 1.55;
 }
 
 .overall-critical {
@@ -99,15 +87,23 @@
   border-left-color: #15803d;
 }
 
-.summary-grid {
+.project-fields,
+.readiness-strip {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
+}
+
+.project-fields {
+  grid-template-columns: minmax(220px, 1.2fr) 150px 190px minmax(180px, 0.8fr);
+}
+
+.readiness-strip {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .metric {
   min-width: 0;
-  padding: 14px;
+  padding: 10px;
   border: 1px solid #e1e7ec;
   border-radius: 8px;
   background: #f7f9fb;
@@ -116,88 +112,69 @@
 .metric span {
   display: block;
   color: #687781;
-  font-size: 0.82rem;
-  margin-bottom: 6px;
+  font-size: 0.74rem;
+  margin-bottom: 4px;
 }
 
 .metric strong {
+  display: block;
   color: #13212c;
-  font-size: clamp(1.25rem, 3vw, 1.8rem);
+  font-size: clamp(1rem, 2.2vw, 1.35rem);
   line-height: 1.1;
-}
-
-.priority-action {
-  grid-column: 1 / -1;
-  display: grid;
-  gap: 5px;
-  padding: 14px;
-  border-radius: 8px;
-  background: #fff7ed;
-  color: #7c2d12;
-}
-
-.priority-action span {
-  font-size: 0.8rem;
-  font-weight: 900;
-  text-transform: uppercase;
-}
-
-.priority-action strong {
   overflow-wrap: anywhere;
 }
 
-.workspace {
+.main-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(310px, 0.75fr);
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.28fr);
   gap: 16px;
   align-items: start;
-  margin-bottom: 16px;
 }
 
-.left-column,
-.right-column {
+.board-panel,
+.panel {
+  padding: 16px;
+}
+
+.right-rail {
   display: grid;
   gap: 16px;
-}
-
-.panel,
-.results-panel {
-  padding: 20px;
 }
 
 .sticky {
   position: sticky;
-  top: 16px;
+  top: 14px;
   z-index: 1;
 }
 
 .section-heading {
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 14px;
 }
 
 .section-heading h2 {
   margin: 0;
   color: #14212b;
-  font-size: 1.14rem;
+  font-size: 1.1rem;
 }
 
-.project-meta {
+.board-context {
+  max-width: 520px;
   margin: 0;
-  color: #687781;
-  font-size: 0.92rem;
-  overflow-wrap: anywhere;
+  color: #5c6b75;
+  font-size: 0.9rem;
+  line-height: 1.45;
   text-align: right;
 }
 
 label {
   display: grid;
-  gap: 7px;
+  gap: 6px;
   color: #33424f;
-  font-size: 0.9rem;
+  font-size: 0.82rem;
   font-weight: 800;
-  margin-bottom: 14px;
+  margin: 0;
 }
 
 input,
@@ -216,13 +193,8 @@ textarea {
   border-radius: 7px;
   background: #fbfcfd;
   color: #17232d;
-  padding: 10px 11px;
+  padding: 9px 10px;
   outline: none;
-}
-
-textarea {
-  min-height: 72px;
-  resize: vertical;
 }
 
 input:focus,
@@ -233,104 +205,13 @@ button:focus-visible {
   border-color: #2563eb;
 }
 
-.form-grid,
-.idea-grid,
-.dependency-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.idea-grid {
-  align-items: stretch;
-}
-
-.idea-card {
-  display: grid;
-  min-width: 0;
-  padding: 14px;
-  border: 1px solid #e2e8ee;
-  border-radius: 8px;
-  background: #fbfcfd;
-}
-
-.idea-keep {
-  border-left: 5px solid #2563eb;
-}
-
-.idea-maybe {
-  border-left: 5px solid #b7791f;
-}
-
-.idea-parked {
-  border-left: 5px solid #64748b;
-}
-
-.idea-rejected {
-  border-left: 5px solid #9f1239;
-}
-
-.inline-controls {
-  gap: 12px;
-  align-items: end;
-}
-
-.inline-controls label:first-child {
-  flex: 1;
-}
-
-.inline-controls label:last-child {
-  justify-items: center;
-  min-width: 70px;
-}
-
-.inline-controls input[type='radio'] {
-  width: 22px;
-  height: 22px;
-}
-
-.lane-list,
-.asset-list {
-  display: grid;
-  gap: 10px;
-}
-
-.row-control {
-  grid-template-columns: minmax(0, 1fr) minmax(140px, 180px);
-  align-items: center;
-  gap: 12px;
-  margin: 0;
-  padding: 10px 0;
-  border-bottom: 1px solid #eef2f5;
-}
-
-.row-control span {
-  overflow-wrap: anywhere;
-}
-
-.dependency-grid {
-  margin-top: 16px;
-}
-
-.check-control {
-  gap: 10px;
-  justify-content: flex-start;
-  margin-bottom: 12px;
-  font-weight: 800;
-}
-
-.check-control input {
-  width: 18px;
-  height: 18px;
-}
-
 button {
   border: 1px solid transparent;
   border-radius: 7px;
   cursor: pointer;
   font-weight: 900;
-  min-height: 40px;
-  padding: 9px 13px;
+  min-height: 38px;
+  padding: 8px 12px;
 }
 
 .secondary {
@@ -339,10 +220,160 @@ button {
   color: #174ea6;
 }
 
-.ghost {
+.ghost,
+.mini-button {
   background: #f6f8fa;
   border-color: #d8e0e6;
   color: #25313b;
+}
+
+.mini-button {
+  min-height: 35px;
+  white-space: nowrap;
+}
+
+.kanban-board {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(220px, 1fr));
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.kanban-column {
+  min-width: 220px;
+  border: 1px solid #e2e8ee;
+  border-radius: 8px;
+  background: #f6f8fa;
+}
+
+.column-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px;
+  border-bottom: 1px solid #e2e8ee;
+}
+
+.column-header h3 {
+  margin: 0 0 3px;
+  color: #17232d;
+  font-size: 0.98rem;
+}
+
+.column-header span,
+.column-header strong {
+  color: #687781;
+  font-size: 0.78rem;
+}
+
+.column-header strong {
+  min-width: 26px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #e9eef3;
+  text-align: center;
+}
+
+.card-stack {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+}
+
+.board-card {
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+  padding: 12px;
+  box-shadow: none;
+}
+
+.board-card h4 {
+  margin: 0;
+  color: #13212c;
+  font-size: 0.98rem;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.board-card p {
+  margin: 0;
+  color: #4c5b66;
+  font-size: 0.84rem;
+  line-height: 1.42;
+  overflow-wrap: anywhere;
+}
+
+.board-card small {
+  color: #687781;
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+
+.card-topline {
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.card-topline span,
+.card-topline strong {
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 900;
+  padding: 3px 7px;
+}
+
+.card-topline span {
+  background: #eef2f6;
+  color: #41505c;
+}
+
+.card-topline strong {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.card-controls {
+  gap: 8px;
+}
+
+.card-controls select {
+  min-width: 0;
+}
+
+.card-checkbox {
+  justify-content: flex-start;
+  gap: 8px;
+  color: #33424f;
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+
+.card-checkbox input {
+  width: 18px;
+  height: 18px;
+}
+
+.card-idea {
+  border-left: 5px solid #2563eb;
+}
+
+.card-lane {
+  border-left: 5px solid #0f766e;
+}
+
+.card-asset {
+  border-left: 5px solid #7c3aed;
+}
+
+.card-dependency {
+  border-left: 5px solid #b7791f;
+}
+
+.card-rule {
+  border-left: 5px solid #64748b;
 }
 
 .focus-list {
@@ -413,14 +444,15 @@ button {
 
 .risk-list {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .risk-card {
   display: grid;
-  gap: 10px;
-  padding: 16px;
+  gap: 9px;
+  padding: 12px;
   border-left-width: 5px;
+  box-shadow: none;
 }
 
 .risk-critical {
@@ -444,9 +476,9 @@ button {
 .severity-pill,
 .priority-pill {
   border-radius: 999px;
-  font-size: 0.76rem;
+  font-size: 0.72rem;
   font-weight: 900;
-  padding: 4px 9px;
+  padding: 4px 8px;
 }
 
 .priority-pill {
@@ -457,13 +489,13 @@ button {
 .risk-card h3 {
   margin: 0;
   color: #13212c;
-  font-size: 1.05rem;
+  font-size: 0.94rem;
   overflow-wrap: anywhere;
 }
 
 dl {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   margin: 0;
 }
 
@@ -474,7 +506,7 @@ dl div {
 
 dt {
   color: #60707d;
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -482,11 +514,32 @@ dt {
 dd {
   margin: 0;
   color: #2f3f4d;
-  line-height: 1.5;
+  font-size: 0.86rem;
+  line-height: 1.45;
   overflow-wrap: anywhere;
 }
 
-@media (max-width: 960px) {
+@media (max-width: 1120px) {
+  .command-bar,
+  .main-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .sticky {
+    position: static;
+  }
+
+  .board-context {
+    text-align: left;
+  }
+}
+
+@media (max-width: 760px) {
+  .app-shell {
+    width: min(100% - 18px, 1440px);
+    padding-top: 16px;
+  }
+
   .topbar,
   .section-heading {
     align-items: flex-start;
@@ -498,41 +551,27 @@ dd {
     width: 100%;
   }
 
-  .diagnosis-hero,
-  .workspace {
-    grid-template-columns: 1fr;
-  }
-
-  .sticky {
-    position: static;
-  }
-
-  .project-meta {
-    text-align: left;
-  }
-}
-
-@media (max-width: 640px) {
-  .app-shell {
-    width: min(100% - 20px, 1240px);
-    padding-top: 18px;
-  }
-
-  .summary-grid,
-  .form-grid,
-  .idea-grid,
-  .dependency-grid,
-  .row-control {
-    grid-template-columns: 1fr;
-  }
-
-  .panel,
-  .results-panel,
-  .diagnosis-hero {
-    padding: 14px;
-  }
-
   .topbar-actions button {
     width: 100%;
+  }
+
+  .project-fields,
+  .readiness-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .command-bar,
+  .board-panel,
+  .panel {
+    padding: 12px;
+  }
+
+  .kanban-board {
+    grid-template-columns: 1fr;
+    overflow-x: visible;
+  }
+
+  .kanban-column {
+    min-width: 0;
   }
 }

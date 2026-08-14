@@ -8,6 +8,7 @@ type AssetStatus = 'missing' | 'draft' | 'ready'
 type DependencyStatus = 'none' | 'planned' | 'waiting' | 'received'
 type Severity = 'critical' | 'warning' | 'ready'
 type Priority = 'Today' | 'This week' | 'Before deadline' | 'Monitor'
+type BoardColumnId = 'decide' | 'next' | 'doing' | 'waiting' | 'ready'
 
 type Idea = {
   id: string
@@ -57,7 +58,14 @@ type Finding = {
   priority: Priority
 }
 
-const STORAGE_KEY = 'deadline-music-os-v1'
+type BoardCard =
+  | { id: string; column: BoardColumnId; kind: 'idea'; title: string; meta: string; note: string; ideaId: string; state: IdeaState; active: boolean }
+  | { id: string; column: BoardColumnId; kind: 'lane'; title: string; meta: string; note: string; laneId: string; status: WorkStatus }
+  | { id: string; column: BoardColumnId; kind: 'asset'; title: string; meta: string; note: string; assetId: string; status: AssetStatus }
+  | { id: string; column: BoardColumnId; kind: 'dependency'; title: string; meta: string; note: string; dependencyId: 'illustrator' | 'videoEditor' | 'mixMaster'; status: DependencyStatus }
+  | { id: string; column: BoardColumnId; kind: 'rule'; title: string; meta: string; note: string; ruleId: 'eventRulesChecked' | 'postingWindowChecked' | 'creditsChecked' | 'promoPlanReady'; checked: boolean }
+
+const STORAGE_KEY = 'deadline-music-os-v2'
 const todayISO = toDateInputValue(new Date())
 
 const sampleProject: ProjectState = {
@@ -68,7 +76,7 @@ const sampleProject: ProjectState = {
   goal: '投稿祭に合わせて1曲を完成させ、初動で聴かれる状態にする',
   activeIdeaId: 'idea-1',
   ideas: [
-    { id: 'idea-1', title: '夜行バスのシンセロック', state: 'keep', note: 'サビ強め。MV化しやすい' },
+    { id: 'idea-1', title: '夜行バスのシンセロック', state: 'keep', note: '本命。サビ強めでMV化しやすい' },
     { id: 'idea-2', title: '透明感ピアノDnB', state: 'maybe', note: '展開がまだ弱い' },
     { id: 'idea-3', title: '8小節ギターリフ', state: 'parked', note: '別企画向き' },
     { id: 'idea-4', title: '和風EDM断片', state: 'rejected', note: '締切に対して作業量が重い' },
@@ -123,6 +131,14 @@ const blankProject: ProjectState = {
   promoPlanReady: false,
 }
 
+const columns: { id: BoardColumnId; title: string; subtitle: string }[] = [
+  { id: 'decide', title: 'Decide', subtitle: '曲案と方針' },
+  { id: 'next', title: 'Next up', subtitle: '未着手' },
+  { id: 'doing', title: 'Doing', subtitle: '制作中' },
+  { id: 'waiting', title: 'Waiting', subtitle: '外部待ち/詰まり' },
+  { id: 'ready', title: 'Ready', subtitle: '完了/確認済み' },
+]
+
 const severityRank: Record<Severity, number> = {
   critical: 0,
   warning: 1,
@@ -161,6 +177,7 @@ function App() {
   const findings = useMemo(() => diagnoseProject(project), [project])
   const summary = useMemo(() => summarizeFindings(findings), [findings])
   const nextFocus = findings.filter((finding) => finding.severity !== 'ready').slice(0, 3)
+  const boardCards = useMemo(() => buildBoard(project), [project])
   const days = daysUntil(project.deadline)
 
   function updateProject<Key extends keyof ProjectState>(key: Key, value: ProjectState[Key]) {
@@ -188,6 +205,14 @@ function App() {
     }))
   }
 
+  function updateDependency(id: 'illustrator' | 'videoEditor' | 'mixMaster', status: DependencyStatus) {
+    setProject((current) => ({ ...current, [id]: status }))
+  }
+
+  function updateRule(id: 'eventRulesChecked' | 'postingWindowChecked' | 'creditsChecked' | 'promoPlanReady', checked: boolean) {
+    setProject((current) => ({ ...current, [id]: checked }))
+  }
+
   function loadSample() {
     setProject(sampleProject)
     window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -201,145 +226,97 @@ function App() {
     <main className="app-shell">
       <header className="topbar">
         <div>
-          <p className="eyebrow">Deadline-centered production OS</p>
+          <p className="eyebrow">Music production board</p>
           <h1>Music Deadline Studio</h1>
         </div>
         <div className="topbar-actions">
           <span className="save-state" aria-live="polite">{saveState}</span>
-          <button className="secondary" type="button" onClick={loadSample}>サンプルを読み込む</button>
+          <button className="secondary" type="button" onClick={loadSample}>サンプル</button>
           <button className="ghost" type="button" onClick={resetProject}>リセット</button>
         </div>
       </header>
 
       {storageWarning && <p className="alert">{storageWarning}</p>}
 
-      <section className={`diagnosis-hero overall-${summary.overall}`} aria-label="制作リスク診断サマリー">
-        <div>
-          <span className="panel-kicker">Project readiness</span>
-          <h2>{severityLabel(summary.overall)}</h2>
-          <p>{summary.message}</p>
+      <section className={`command-bar overall-${summary.overall}`} aria-label="プロジェクト概要とリスクサマリー">
+        <div className="project-fields">
+          <label>
+            Project
+            <input value={project.projectName} onChange={(event) => updateProject('projectName', event.target.value)} placeholder="ボカコレ2026夏 Top100挑戦" />
+          </label>
+          <label>
+            Deadline
+            <input type="date" value={project.deadline} onChange={(event) => updateProject('deadline', event.target.value)} />
+          </label>
+          <label>
+            Type
+            <select aria-label="Event type" value={project.eventType} onChange={(event) => updateProject('eventType', event.target.value as EventType)}>
+              <option value="bokacolle">ボカコレ / 投稿祭</option>
+              <option value="dtm-contest">DTMコンペ / 公募</option>
+              <option value="cover-mv">歌ってみた / MV公開</option>
+              <option value="distribution">配信リリース</option>
+            </select>
+          </label>
+          <label>
+            Platform
+            <input value={project.platform} onChange={(event) => updateProject('platform', event.target.value)} placeholder="NicoNico / YouTube" />
+          </label>
         </div>
-        <div className="summary-grid">
-          <Metric label="締切まで" value={`${days}日`} />
+        <div className="readiness-strip">
+          <Metric label="Readiness" value={severityLabel(summary.overall)} />
+          <Metric label="Days" value={`${days}`} />
           <Metric label="Critical" value={`${summary.critical}`} />
           <Metric label="Warning" value={`${summary.warning}`} />
         </div>
-        <div className="priority-action">
-          <span>Next focus</span>
-          <strong>{nextFocus[0]?.action ?? '現時点では大きなリスクは見えていません。進捗が変わったら再確認してください。'}</strong>
-        </div>
       </section>
 
-      <section className="workspace">
-        <div className="left-column">
-          <section className="panel" aria-label="イベント概要">
-            <div className="section-heading">
-              <div>
-                <span className="panel-kicker">Event / Opportunity</span>
-                <h2>締切から制作を組み立てる</h2>
-              </div>
+      <section className="main-layout">
+        <section className="board-panel" aria-label="制作カンバン">
+          <div className="section-heading">
+            <div>
+              <span className="panel-kicker">Kanban</span>
+              <h2>締切に向けた制作ボード</h2>
             </div>
-            <div className="form-grid">
-              <label>
-                Project name
-                <input value={project.projectName} onChange={(event) => updateProject('projectName', event.target.value)} placeholder="ボカコレ2026夏 Top100挑戦" />
-              </label>
-              <label>
-                Deadline
-                <input type="date" value={project.deadline} onChange={(event) => updateProject('deadline', event.target.value)} />
-              </label>
-              <label>
-                Event type
-                <select aria-label="Event type" value={project.eventType} onChange={(event) => updateProject('eventType', event.target.value as EventType)}>
-                  <option value="bokacolle">ボカコレ / 投稿祭</option>
-                  <option value="dtm-contest">DTMコンペ / 公募</option>
-                  <option value="cover-mv">歌ってみた / MV公開</option>
-                  <option value="distribution">配信リリース</option>
-                </select>
-              </label>
-              <label>
-                Main platform
-                <input value={project.platform} onChange={(event) => updateProject('platform', event.target.value)} placeholder="NicoNico / YouTube" />
-              </label>
-            </div>
-            <label>
-              Goal
-              <textarea value={project.goal} onChange={(event) => updateProject('goal', event.target.value)} placeholder="この締切で達成したいこと" />
-            </label>
-          </section>
-
-          <section className="panel" aria-label="曲案ボード">
-            <div className="section-heading">
-              <div>
-                <span className="panel-kicker">Ideas / Demos</span>
-                <h2>曲案を捨てずに選ぶ</h2>
-              </div>
-            </div>
-            <div className="idea-grid">
-              {project.ideas.map((idea) => (
-                <article className={`idea-card idea-${idea.state}`} key={idea.id}>
-                  <label>
-                    Idea
-                    <input value={idea.title} onChange={(event) => updateIdea(idea.id, { title: event.target.value })} placeholder="曲案名" />
-                  </label>
-                  <div className="inline-controls">
-                    <label>
-                      State
-                      <select aria-label={`${idea.title || idea.id} state`} value={idea.state} onChange={(event) => updateIdea(idea.id, { state: event.target.value as IdeaState })}>
-                        <option value="keep">Keep</option>
-                        <option value="maybe">Maybe</option>
-                        <option value="parked">Parked</option>
-                        <option value="rejected">Rejected</option>
-                      </select>
-                    </label>
-                    <label>
-                      Active
-                      <input
-                        aria-label={`${idea.title || idea.id} active idea`}
-                        checked={project.activeIdeaId === idea.id}
-                        onChange={() => updateProject('activeIdeaId', idea.id)}
-                        type="radio"
+            <p className="board-context">{project.goal || 'この締切で達成したいことをProject欄に整理してください。'}</p>
+          </div>
+          <div className="kanban-board">
+            {columns.map((column) => {
+              const cards = boardCards.filter((card) => card.column === column.id)
+              return (
+                <section className="kanban-column" aria-label={`${column.title} column`} key={column.id}>
+                  <header className="column-header">
+                    <div>
+                      <h3>{column.title}</h3>
+                      <span>{column.subtitle}</span>
+                    </div>
+                    <strong>{cards.length}</strong>
+                  </header>
+                  <div className="card-stack">
+                    {cards.map((card) => (
+                      <BoardCardView
+                        card={card}
+                        key={card.id}
+                        onAssetChange={updateAsset}
+                        onDependencyChange={updateDependency}
+                        onIdeaChange={updateIdea}
+                        onLaneChange={updateLane}
+                        onRuleChange={updateRule}
+                        onSetActiveIdea={(id) => updateProject('activeIdeaId', id)}
                       />
-                    </label>
+                    ))}
                   </div>
-                  <label>
-                    Note
-                    <textarea value={idea.note} onChange={(event) => updateIdea(idea.id, { note: event.target.value })} placeholder="残す理由 / ボツ理由 / 懸念" />
-                  </label>
-                </article>
-              ))}
-            </div>
-          </section>
+                </section>
+              )
+            })}
+          </div>
+        </section>
 
-          <section className="panel" aria-label="制作レーン">
-            <div className="section-heading">
-              <div>
-                <span className="panel-kicker">Production lanes</span>
-                <h2>制作進捗</h2>
-              </div>
-            </div>
-            <div className="lane-list">
-              {project.lanes.map((lane) => (
-                <label className="row-control" key={lane.id}>
-                  <span>{lane.label}</span>
-                  <select aria-label={lane.label} value={lane.status} onChange={(event) => updateLane(lane.id, event.target.value as WorkStatus)}>
-                    <option value="not-started">Not started</option>
-                    <option value="in-progress">In progress</option>
-                    <option value="blocked">Blocked</option>
-                    <option value="done">Done</option>
-                  </select>
-                </label>
-              ))}
-            </div>
-          </section>
-        </div>
-
-        <aside className="right-column">
+        <aside className="right-rail">
           <section className="panel sticky" aria-label="次にやること">
             <div className="section-heading">
               <div>
-                <span className="panel-kicker">Today / This week</span>
-                <h2>次に集中すること</h2>
+                <span className="panel-kicker">Next focus</span>
+                <h2>次に動かすカード</h2>
               </div>
             </div>
             <ol className="focus-list">
@@ -363,118 +340,118 @@ function App() {
             </ol>
           </section>
 
-          <section className="panel" aria-label="素材と外部依存">
+          <section className="panel" aria-label="リスク診断結果">
             <div className="section-heading">
               <div>
-                <span className="panel-kicker">Assets / Dependencies</span>
-                <h2>素材と待ち状態</h2>
+                <span className="panel-kicker">Risk diagnosis</span>
+                <h2>危ない理由</h2>
               </div>
             </div>
-            <div className="asset-list">
-              {project.assets.map((asset) => (
-                <label className="row-control" key={asset.id}>
-                  <span>{asset.label}</span>
-                  <select aria-label={asset.label} value={asset.status} onChange={(event) => updateAsset(asset.id, event.target.value as AssetStatus)}>
-                    <option value="missing">Missing</option>
-                    <option value="draft">Draft</option>
-                    <option value="ready">Ready</option>
-                  </select>
-                </label>
+            <div className="risk-list">
+              {findings.slice(0, 6).map((finding) => (
+                <article className={`risk-card risk-${finding.severity}`} key={finding.id}>
+                  <div className="risk-topline">
+                    <span className={`severity-pill severity-${finding.severity}`}>{severityLabel(finding.severity)}</span>
+                    <span className="priority-pill">{finding.priority}</span>
+                  </div>
+                  <h3>{finding.title}</h3>
+                  <dl>
+                    <div>
+                      <dt>Signal</dt>
+                      <dd>{finding.signal}</dd>
+                    </div>
+                    <div>
+                      <dt>Next action</dt>
+                      <dd>{finding.action}</dd>
+                    </div>
+                  </dl>
+                </article>
               ))}
             </div>
-            <div className="dependency-grid">
-              <label>
-                Illustrator
-                <select aria-label="Illustrator dependency" value={project.illustrator} onChange={(event) => updateProject('illustrator', event.target.value as DependencyStatus)}>
-                  <option value="none">None</option>
-                  <option value="planned">Planned</option>
-                  <option value="waiting">Waiting</option>
-                  <option value="received">Received</option>
-                </select>
-              </label>
-              <label>
-                Video editor
-                <select aria-label="Video editor dependency" value={project.videoEditor} onChange={(event) => updateProject('videoEditor', event.target.value as DependencyStatus)}>
-                  <option value="none">None</option>
-                  <option value="planned">Planned</option>
-                  <option value="waiting">Waiting</option>
-                  <option value="received">Received</option>
-                </select>
-              </label>
-              <label>
-                Mix / Master
-                <select aria-label="Mix master dependency" value={project.mixMaster} onChange={(event) => updateProject('mixMaster', event.target.value as DependencyStatus)}>
-                  <option value="none">None</option>
-                  <option value="planned">Planned</option>
-                  <option value="waiting">Waiting</option>
-                  <option value="received">Received</option>
-                </select>
-              </label>
-            </div>
-          </section>
-
-          <section className="panel" aria-label="ルール確認">
-            <div className="section-heading">
-              <div>
-                <span className="panel-kicker">Rule profile</span>
-                <h2>イベント固有チェック</h2>
-              </div>
-            </div>
-            <label className="check-control">
-              <input checked={project.eventRulesChecked} onChange={(event) => updateProject('eventRulesChecked', event.target.checked)} type="checkbox" />
-              募集要項 / 投稿条件を確認した
-            </label>
-            <label className="check-control">
-              <input checked={project.postingWindowChecked} onChange={(event) => updateProject('postingWindowChecked', event.target.checked)} type="checkbox" />
-              投稿期間 / 予約投稿 / 公開設定を確認した
-            </label>
-            <label className="check-control">
-              <input checked={project.creditsChecked} onChange={(event) => updateProject('creditsChecked', event.target.checked)} type="checkbox" />
-              クレジット / 権利表記を確認した
-            </label>
-            <label className="check-control">
-              <input checked={project.promoPlanReady} onChange={(event) => updateProject('promoPlanReady', event.target.checked)} type="checkbox" />
-              告知導線と初動投稿を用意した
-            </label>
           </section>
         </aside>
       </section>
-
-      <section className="results-panel" aria-label="リスク診断結果">
-        <div className="section-heading">
-          <div>
-            <span className="panel-kicker">Risk diagnosis</span>
-            <h2>なぜ危ないか</h2>
-          </div>
-          <p className="project-meta">{project.projectName || 'Untitled project'} / {days} days left</p>
-        </div>
-        <div className="risk-list">
-          {findings.map((finding) => (
-            <article className={`risk-card risk-${finding.severity}`} key={finding.id}>
-              <div className="risk-topline">
-                <span className={`severity-pill severity-${finding.severity}`}>{severityLabel(finding.severity)}</span>
-                <span className="priority-pill">{finding.priority}</span>
-              </div>
-              <h3>{finding.title}</h3>
-              <dl>
-                <div>
-                  <dt>Why this matters</dt>
-                  <dd>{finding.why}</dd>
-                </div>
-                <div>
-                  <dt>Signal</dt>
-                  <dd>{finding.signal}</dd>
-                </div>
-                <div>
-                  <dt>Next action</dt>
-                  <dd>{finding.action}</dd>
-                </div>
-              </dl>
-            </article>
-          ))}
-        </div>
-      </section>
     </main>
+  )
+}
+
+function BoardCardView({
+  card,
+  onAssetChange,
+  onDependencyChange,
+  onIdeaChange,
+  onLaneChange,
+  onRuleChange,
+  onSetActiveIdea,
+}: {
+  card: BoardCard
+  onAssetChange: (id: string, status: AssetStatus) => void
+  onDependencyChange: (id: 'illustrator' | 'videoEditor' | 'mixMaster', status: DependencyStatus) => void
+  onIdeaChange: (id: string, patch: Partial<Idea>) => void
+  onLaneChange: (id: string, status: WorkStatus) => void
+  onRuleChange: (id: 'eventRulesChecked' | 'postingWindowChecked' | 'creditsChecked' | 'promoPlanReady', checked: boolean) => void
+  onSetActiveIdea: (id: string) => void
+}) {
+  return (
+    <article className={`board-card card-${card.kind}`}>
+      <div className="card-topline">
+        <span>{kindLabel(card.kind)}</span>
+        {card.kind === 'idea' && card.active && <strong>Active</strong>}
+      </div>
+      <h4>{card.title}</h4>
+      <p>{card.note}</p>
+      <small>{card.meta}</small>
+
+      {card.kind === 'idea' && (
+        <div className="card-controls">
+          <select aria-label={`${card.title} state`} value={card.state} onChange={(event) => onIdeaChange(card.ideaId, { state: event.target.value as IdeaState })}>
+            <option value="keep">Keep</option>
+            <option value="maybe">Maybe</option>
+            <option value="parked">Parked</option>
+            <option value="rejected">Rejected</option>
+          </select>
+          <button className="mini-button" type="button" onClick={() => onSetActiveIdea(card.ideaId)}>本命</button>
+        </div>
+      )}
+
+      {card.kind === 'lane' && (
+        <select aria-label={card.title} value={card.status} onChange={(event) => onLaneChange(card.laneId, event.target.value as WorkStatus)}>
+          <option value="not-started">Not started</option>
+          <option value="in-progress">In progress</option>
+          <option value="blocked">Blocked</option>
+          <option value="done">Done</option>
+        </select>
+      )}
+
+      {card.kind === 'asset' && (
+        <select aria-label={card.title} value={card.status} onChange={(event) => onAssetChange(card.assetId, event.target.value as AssetStatus)}>
+          <option value="missing">Missing</option>
+          <option value="draft">Draft</option>
+          <option value="ready">Ready</option>
+        </select>
+      )}
+
+      {card.kind === 'dependency' && (
+        <select aria-label={`${card.title} dependency`} value={card.status} onChange={(event) => onDependencyChange(card.dependencyId, event.target.value as DependencyStatus)}>
+          <option value="none">None</option>
+          <option value="planned">Planned</option>
+          <option value="waiting">Waiting</option>
+          <option value="received">Received</option>
+        </select>
+      )}
+
+      {card.kind === 'rule' && (
+        <label className="card-checkbox">
+          <input
+            aria-label={`${card.title} checked`}
+            checked={card.checked}
+            onChange={(event) => onRuleChange(card.ruleId, event.target.checked)}
+            type="checkbox"
+          />
+          確認済み
+        </label>
+      )}
+    </article>
   )
 }
 
@@ -485,6 +462,97 @@ function Metric({ label, value }: { label: string; value: string }) {
       <strong>{value}</strong>
     </div>
   )
+}
+
+function buildBoard(project: ProjectState): BoardCard[] {
+  return [
+    ...project.ideas.map<BoardCard>((idea) => ({
+      id: `idea-${idea.id}`,
+      column: idea.state === 'keep' ? 'doing' : idea.state === 'maybe' ? 'decide' : idea.state === 'parked' ? 'next' : 'ready',
+      kind: 'idea',
+      title: idea.title || 'Untitled idea',
+      meta: ideaStateLabel(idea.state),
+      note: idea.note || 'メモなし',
+      ideaId: idea.id,
+      state: idea.state,
+      active: project.activeIdeaId === idea.id,
+    })),
+    ...project.lanes.map<BoardCard>((lane) => ({
+      id: `lane-${lane.id}`,
+      column: lane.status === 'blocked' ? 'waiting' : lane.status === 'in-progress' ? 'doing' : lane.status === 'done' ? 'ready' : 'next',
+      kind: 'lane',
+      title: lane.label,
+      meta: statusLabel(lane.status),
+      note: laneNote(lane.id),
+      laneId: lane.id,
+      status: lane.status,
+    })),
+    ...project.assets.map<BoardCard>((asset) => ({
+      id: `asset-${asset.id}`,
+      column: asset.status === 'ready' ? 'ready' : asset.status === 'draft' ? 'doing' : 'next',
+      kind: 'asset',
+      title: asset.label,
+      meta: assetStatusLabel(asset.status),
+      note: assetNote(asset.id),
+      assetId: asset.id,
+      status: asset.status,
+    })),
+    ...dependencyCards(project),
+    ...ruleCards(project),
+  ]
+}
+
+function dependencyCards(project: ProjectState): BoardCard[] {
+  return [
+    dependencyCard('illustrator', 'Illustrator', project.illustrator, 'サムネ/ジャケット/MV素材の外部依存'),
+    dependencyCard('videoEditor', 'Video editor', project.videoEditor, 'MVや投稿動画の外部依存'),
+    dependencyCard('mixMaster', 'Mix / Master support', project.mixMaster, '音源確定前の外部依存'),
+  ]
+}
+
+function dependencyCard(
+  dependencyId: 'illustrator' | 'videoEditor' | 'mixMaster',
+  title: string,
+  status: DependencyStatus,
+  note: string,
+): BoardCard {
+  return {
+    id: `dependency-${dependencyId}`,
+    column: status === 'waiting' ? 'waiting' : status === 'received' ? 'ready' : status === 'planned' ? 'next' : 'decide',
+    kind: 'dependency',
+    title,
+    meta: dependencyLabel(status),
+    note,
+    dependencyId,
+    status,
+  }
+}
+
+function ruleCards(project: ProjectState): BoardCard[] {
+  return [
+    ruleCard('eventRulesChecked', '募集要項 / 投稿条件', project.eventRulesChecked, '失格、ランキング対象外、応募形式の確認'),
+    ruleCard('postingWindowChecked', '投稿期間 / 予約投稿', project.postingWindowChecked, '公開時刻、予約投稿、必要タグの確認'),
+    ruleCard('creditsChecked', 'クレジット / 使用条件', project.creditsChecked, '共同制作者、外注、権利表記の確認'),
+    ruleCard('promoPlanReady', '告知導線 / 初動投稿', project.promoPlanReady, '公開URL、SNS素材、投稿文の準備'),
+  ]
+}
+
+function ruleCard(
+  ruleId: 'eventRulesChecked' | 'postingWindowChecked' | 'creditsChecked' | 'promoPlanReady',
+  title: string,
+  checked: boolean,
+  note: string,
+): BoardCard {
+  return {
+    id: `rule-${ruleId}`,
+    column: checked ? 'ready' : 'next',
+    kind: 'rule',
+    title,
+    meta: checked ? 'Checked' : 'Needs check',
+    note,
+    ruleId,
+    checked,
+  }
 }
 
 function diagnoseProject(project: ProjectState) {
@@ -504,7 +572,7 @@ function diagnoseProject(project: ProjectState) {
       severity: 'critical',
       title: 'プロジェクトの対象が曖昧です',
       why: '締切、曲案、素材、外注待ちを結びつける中心がないと、日々の作業と公開準備がまた分断されます。',
-      signal: 'Project name が未入力です。',
+      signal: 'Project が未入力です。',
       action: 'この締切で何を出すかを1行で名前にしてください。',
       priority: 'Today',
     })
@@ -730,11 +798,6 @@ function summarizeFindings(findings: Finding[]) {
     warning,
     ready,
     overall,
-    message: {
-      critical: '締切に対して危ない依存関係があります。タスクを増やす前に、上位のCriticalを潰してください。',
-      warning: '制作は進んでいますが、公開素材・ルール・外部待ちに注意が必要です。',
-      ready: '現在の進捗では大きなリスクは見えていません。日々の更新から自然にReadinessを確認できます。',
-    }[overall],
   }
 }
 
@@ -754,6 +817,40 @@ function mergeById<T extends { id: string }>(base: T[], incoming?: T[]) {
   return base.map((item) => ({ ...item, ...incoming.find((next) => next.id === item.id) }))
 }
 
+function kindLabel(kind: BoardCard['kind']) {
+  return {
+    idea: 'Idea',
+    lane: 'Work',
+    asset: 'Asset',
+    dependency: 'Wait',
+    rule: 'Rule',
+  }[kind]
+}
+
+function laneNote(id: string) {
+  return {
+    composition: '曲の芯を固める',
+    arrangement: '完成形の密度に近づける',
+    vocal: '歌/調声/録音を確定する',
+    mix: '提出候補の音源にする',
+    artwork: '公開面の見た目を揃える',
+    upload: '投稿画面と公開設定を作る',
+    promotion: '初動で出す素材と文面を揃える',
+  }[id] ?? '制作作業'
+}
+
+function assetNote(id: string) {
+  return {
+    audio: '投稿や配信に使う最終音源',
+    lyrics: '動画、概要欄、クレジットの元情報',
+    artwork: 'サムネ、ジャケット、告知画像',
+    video: 'NicoNico/YouTubeで公開する本体',
+    description: '概要欄、タグ、リンク、説明文',
+    credits: '共同制作者と表記',
+    sns: '公開前後の告知素材',
+  }[id] ?? '公開素材'
+}
+
 function laneLabel(project: ProjectState, id: string) {
   return project.lanes.find((lane) => lane.id === id)?.label ?? id
 }
@@ -767,6 +864,14 @@ function statusLabel(status: WorkStatus) {
   }[status]
 }
 
+function assetStatusLabel(status: AssetStatus) {
+  return {
+    missing: 'Missing',
+    draft: 'Draft',
+    ready: 'Ready',
+  }[status]
+}
+
 function dependencyLabel(status: DependencyStatus) {
   return {
     none: 'None',
@@ -774,6 +879,15 @@ function dependencyLabel(status: DependencyStatus) {
     waiting: 'Waiting',
     received: 'Received',
   }[status]
+}
+
+function ideaStateLabel(state: IdeaState) {
+  return {
+    keep: 'Keep',
+    maybe: 'Maybe',
+    parked: 'Parked',
+    rejected: 'Rejected',
+  }[state]
 }
 
 function severityLabel(severity: Severity) {

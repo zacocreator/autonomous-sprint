@@ -2,7 +2,7 @@
 
 Music Deadline Studio is a local-first validation MVP for independent music creators working toward a deadline-driven release, contest, posting festival, cover video, MV, or distribution launch.
 
-The product is not a generic task manager and not a standalone release checklist. The core experience is: update the current production state, then see what is risky, why it matters, and what to focus on next.
+The product is not a generic task manager and not a standalone release checklist. The core experience is: move music-specific production cards across a deadline-centered kanban board, then see what is risky, why it matters, and what to focus on next.
 
 ## Product Goal
 
@@ -24,12 +24,13 @@ Music creators will value a product that connects daily production work with dea
 
 - Event/deadline project profile
 - Preset event types: Bokacolle/posting festival, DTM contest, cover/MV, distribution release
-- Idea/demo board with `Keep`, `Maybe`, `Parked`, and `Rejected`
+- Kanban-first production board with `Decide`, `Next up`, `Doing`, `Waiting`, and `Ready`
+- Idea/demo cards with `Keep`, `Maybe`, `Parked`, and `Rejected`
 - Production lanes for composition, arrangement, vocal, Mix/Master, artwork/MV, upload, and promotion
 - Asset readiness for audio, lyrics, artwork, video, description/tags, credits, and SNS assets
 - External dependency state for illustrator, video editor, and Mix/Master
 - Rule checks for event requirements, posting windows, credits, and promotion plan
-- Automatic risk diagnosis with `Critical`, `Warning`, and `Ready`
+- Automatic risk diagnosis derived from board state with `Critical`, `Warning`, and `Ready`
 - `Next Focus` list with 1-3 prioritized actions
 - Sample Bokacolle-style project for fast validation
 - Browser-only persistence through `localStorage`
@@ -72,6 +73,7 @@ npm run test:e2e
 - [ ] App opens without runtime errors
 - [ ] Sample event project is visible immediately
 - [ ] Event type, deadline, platform, and goal can be edited
+- [ ] Kanban board is visible as the main work surface
 - [ ] Ideas/demos can be classified as Keep, Maybe, Parked, or Rejected
 - [ ] Active idea can be selected
 - [ ] Production lane status changes affect risk diagnosis
