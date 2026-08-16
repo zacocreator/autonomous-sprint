@@ -1,77 +1,100 @@
-# Renewal Radar
+# Music Campaign Board MVP
 
-Renewal Radar is a small local-first web app for tracking subscription renewals. It helps solo operators and small teams see upcoming renewals, monthly equivalent spend, yearly equivalent spend, category cost, and review candidates in one screen.
+音楽制作者・小規模チーム向けの、制作/リリース/イベント準備カンバンです。
 
-## Target User
-
-- Freelancers and solo product builders
-- Small team owners managing SaaS, domains, cloud tools, and creative software
-- Anyone who wants to review recurring costs without connecting bank, email, or billing accounts
+このMVPの狙いは、単なるチェックリストではなく、曲・素材・告知・提出準備・外部依存の進捗から、リリース前に危ない点と次にやるべきことが自然に見えるかを検証することです。
 
 ## Product Goal
 
-Users can register their main recurring subscriptions within 10 minutes and understand renewals due in the next 30 days plus monthly equivalent cost from a single dashboard.
+個人または小規模な音楽活動で、曲案、音源、動画、告知、配信登録、ライブ準備が散らばり、次に何を進めるべきか分からなくなる問題を軽減する。
 
-## MVP Features
+## Core Hypothesis
 
-- Add, edit, and delete subscriptions
-- Track service name, amount, currency, billing cycle, next renewal date, category, status, and memo
-- Store data in browser `localStorage`
-- Show monthly equivalent spend, yearly equivalent spend, 30-day renewals, and review candidates
-- Show category-level monthly spend
-- List subscriptions sorted by renewal date
-- Filter by status and category
-- Export and import JSON backups
-- Empty, validation, storage warning, and no-result states
-- Responsive layout for desktop and mobile
+音楽制作者は、汎用タスク管理ツールの空白ボードよりも、音楽活動の文脈に合わせた項目・状態・依存関係を持つカンバンに価値を感じる。
 
-## Run Locally
+さらに、Release readinessが手入力チェックリストではなく、日々の進捗更新から自然に診断されるなら、次回リリースやイベント準備でも使う可能性が高まる。
+
+## MVP Scope
+
+- 日本語UI
+- 音楽制作向けカンバン
+- 複数プロジェクト管理
+- 新規プロジェクト作成フロー
+- テンプレート選択
+  - 投稿祭 / ボカコレ
+  - DTMコンペ / 案件
+  - 歌ってみた / MV
+  - 配信リリース
+  - ライブ / イベント
+- ワークストリーム行 / スイムレーン
+- 曲、音源、映像/画像、告知、提出/配信、ライブ、権利/表記のカード管理
+- ドラッグによる状態変更
+- 右ペインでのカード詳細編集
+- 状態変更
+  - アイデア
+  - 次にやる
+  - 作業中
+  - 待ち
+  - 確認中
+  - 完了
+- 進捗、期限、外部依存、素材状態からのReadiness診断
+- 次に見るべきことの提示
+- ブラウザ内保存
+- 中長期仮説としてのフォルダ復元デモ導線
+
+## 3 Sprint PoC Summary
+
+### Sprint 1: ボード構造
+
+- 状態列だけのカンバンから、ワークストリーム行 × 状態列のボードへ変更
+- 曲、曲案ストック、MV、投稿準備、告知、ライブ準備などを行として分けられるようにした
+- 行単位の停滞もReadiness診断の対象にした
+
+### Sprint 2: 操作性
+
+- カードをドラッグして状態列へ移動できるようにした
+- カード内のselect主導をやめ、右ペインで詳細編集する形に変更
+- 一覧編集は初期表示から外し、必要時だけ開く補助ビューにした
+
+### Sprint 3: 継続利用
+
+- 複数プロジェクトの作成・切替・保存に対応
+- 新規プロジェクト作成時にテンプレートを選ぶ導線を追加
+- ペルソナVoCをもとに、曲中心だけでなく投稿祭、コンペ、配信、ライブ、歌ってみた/MVを扱える構造にした
+
+## Out of Scope
+
+- ユーザー認証
+- チーム招待
+- 実ファイル解析
+- DAW連携
+- ディストリビューター連携
+- SNS投稿連携
+- 決済
+- 本番データベース
+
+## 起動方法
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open the local URL printed by Vite.
+ブラウザで `http://127.0.0.1:5173/` を開きます。
 
-## Build
-
-```bash
-npm run build
-```
-
-## Test
+## 確認方法
 
 ```bash
 npm run lint
+npm run build
 npm run test:e2e
 ```
 
-## QA Checklist
+## Validationで確認したいこと
 
-- [ ] App opens without runtime errors
-- [ ] Empty state appears when no subscriptions exist
-- [ ] Sample data can be loaded
-- [ ] A subscription can be added with all required fields
-- [ ] Empty service name is rejected
-- [ ] Zero or negative amount is rejected
-- [ ] Existing subscriptions can be edited
-- [ ] Existing subscriptions can be deleted
-- [ ] Data remains after page reload
-- [ ] Monthly and yearly totals update after CRUD changes
-- [ ] 30-day renewals list updates from renewal dates
-- [ ] Category totals update from active subscriptions
-- [ ] Status filter works
-- [ ] Category filter works
-- [ ] No-result state appears when filters match nothing
-- [ ] JSON export downloads a file
-- [ ] JSON import replaces data only after confirmation
-- [ ] Invalid JSON import shows an error and keeps existing data
-- [ ] Mobile width has no horizontal scrolling
-- [ ] Desktop layout keeps dashboard, editor, insights, and list readable
-- [ ] `npm run build` succeeds
-- [ ] `npm run test:e2e` succeeds
-
-## Storage and Privacy
-
-Renewal Radar has no backend. Subscription data is stored only in the current browser through `localStorage`. Export JSON before clearing browser data or switching devices.
+- 週次または日々の制作確認で開く場面があるか
+- 曲以外に、投稿祭、コンペ、ライブ、配信リリースなどの切り口でも自然に使えるか
+- 汎用タスク管理より、音楽活動向けテンプレートと状態がある方が始めやすいか
+- ステータス更新から出るReadiness診断に納得感があるか
+- 入力負荷が日常利用に耐えられるか
+- フォルダ復元の中長期仮説に期待があるか
